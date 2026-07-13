@@ -13,4 +13,5 @@ from .schemas import (
     ExtractedLocation,
     PrioritizedCase,
     PriorityReport,
+    RescueStation,
 )

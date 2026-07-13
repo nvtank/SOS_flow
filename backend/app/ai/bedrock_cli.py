@@ -45,7 +45,7 @@ logging.basicConfig(
 )
 
 from app.ai.analyzer import AIAnalyzerFactory
-from app.ai.prioritizer import EmergencyPrioritizer
+from app.ai.prioritizer import EmergencyPrioritizer, extract_coordinates
 from app.ai.schemas import AIAnalysis, PriorityReport
 
 
@@ -89,6 +89,7 @@ def _print_help() -> None:
 {C.CYAN}Commands:{C.RESET}
   {C.BOLD}<text>{C.RESET}       Nhap bao cao khan cap de phan tich
   {C.BOLD}compare{C.RESET}     So sanh nhieu case va xep hang uu tien
+  {C.BOLD}stations{C.RESET}    Hien thi danh sach tram cuu ho
   {C.BOLD}mode{C.RESET}        Xem mode hien tai
   {C.BOLD}help{C.RESET}        Hien thi huong dan
   {C.BOLD}quit{C.RESET}        Thoat
@@ -158,13 +159,23 @@ def _print_priority_report(report: PriorityReport, elapsed: float) -> None:
     for rank, case in enumerate(report.cases, start=1):
         level_color = _LEVEL_COLORS.get(case.priority_level, C.DIM)
 
+        # Score + distance display
+        dist_info = ""
+        if case.distance_km is not None and case.nearest_station:
+            dist_info = f" | {case.distance_km:.1f}km -> {case.nearest_station}"
+
         print(f"  {C.BOLD}#{rank}{C.RESET}  "
               f"{level_color}[{case.priority_level}]{C.RESET}  "
               f"{C.BOLD}{case.case_id}{C.RESET}  "
-              f"{C.DIM}(score: {case.priority_score}){C.RESET}")
+              f"{C.DIM}(score: {case.priority_score}{dist_info}){C.RESET}")
 
         # Summary from original analysis
         print(f"      Summary : {case.original_analysis.summary}")
+
+        # Coordinates
+        loc = case.original_analysis.extracted_location
+        if loc.latitude is not None and loc.longitude is not None:
+            print(f"      Toa do  : {loc.latitude}, {loc.longitude}")
 
         # Key facts
         facts = []
@@ -240,6 +251,7 @@ async def compare_mode(analyzer: object, prioritizer_mode: str) -> None:
 {C.MAGENTA}{'=' * 60}{C.RESET}
 {C.BOLD}{C.MAGENTA}  CHE DO SO SANH UU TIEN{C.RESET}
 {C.DIM}  Nhap tung bao cao, moi bao cao 1 dong.
+  Them toa do: bao cao @lat,lon (VD: 10 nguoi mac ket @15.02,108.04)
   Go 'done' khi da nhap het de bat dau so sanh.
   Go 'cancel' de huy.{C.RESET}
 {C.MAGENTA}{'=' * 60}{C.RESET}
@@ -270,10 +282,17 @@ async def compare_mode(analyzer: object, prioritizer_mode: str) -> None:
             case_num -= 1
             break
 
+        # Extract coordinates from input (e.g. "bao cao @15.02,108.04")
+        lat, lon, clean_text = extract_coordinates(user_input)
+
         # Analyze this case
         t0 = time.monotonic()
         try:
-            result = await analyzer.analyze(user_input)
+            result = await analyzer.analyze(clean_text)
+            # Inject coordinates into analysis if found
+            if lat is not None and lon is not None:
+                result.extracted_location.latitude = lat
+                result.extracted_location.longitude = lon
             elapsed = time.monotonic() - t0
             case_id = f"Case_{case_num}"
             cases[case_id] = result
@@ -333,6 +352,14 @@ async def interactive_loop(mode: str) -> None:
 
         if cmd == "mode":
             print(f"{C.DIM}  Current mode: {mode} | Priority: {priority_mode}{C.RESET}")
+            continue
+
+        if cmd == "stations":
+            from app.ai.prioritizer import DEFAULT_RESCUE_STATIONS
+            print(f"\n{C.CYAN}  Tram cuu ho:{C.RESET}")
+            for s in DEFAULT_RESCUE_STATIONS:
+                print(f"    [{s.station_type:>7}] {s.name}  ({s.latitude}, {s.longitude})")
+            print()
             continue
 
         if cmd == "help":

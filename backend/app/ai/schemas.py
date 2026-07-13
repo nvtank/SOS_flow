@@ -9,6 +9,8 @@ class ExtractedLocation(BaseModel):
     district: Optional[str] = None
     commune: Optional[str] = None
     village: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class AIAnalysis(BaseModel):
@@ -44,19 +46,35 @@ class AIAnalysis(BaseModel):
 # ---------------------------------------------------------------------------
 # Priority ranking schemas
 # ---------------------------------------------------------------------------
-class PrioritizedCase(BaseModel):
-    """Một case đã được xếp hạng ưu tiên."""
+class RescueStation(BaseModel):
+    """Tram cuu ho co dinh."""
+    name: str
+    latitude: float
+    longitude: float
+    station_type: str = Field(description="Loai tram: rescue / medical / admin")
 
-    case_id: str = Field(description="ID hoặc label của case")
+
+class PrioritizedCase(BaseModel):
+    """Mot case da duoc xep hang uu tien."""
+
+    case_id: str = Field(description="ID hoac label cua case")
     priority_score: float = Field(
         ge=0.0, le=100.0,
-        description="Điểm ưu tiên 0-100 (100 = khẩn cấp nhất)",
+        description="Diem uu tien 0-100 (100 = khan cap nhat)",
     )
     priority_level: str = Field(
-        description="Mức ưu tiên: CRITICAL / HIGH / MEDIUM / LOW",
+        description="Muc uu tien: CRITICAL / HIGH / MEDIUM / LOW",
     )
     reasoning: str = Field(
-        description="Giải thích lý do xếp hạng ưu tiên",
+        description="Giai thich ly do xep hang uu tien",
+    )
+    nearest_station: Optional[str] = Field(
+        default=None,
+        description="Ten tram cuu ho gan nhat",
+    )
+    distance_km: Optional[float] = Field(
+        default=None,
+        description="Khoang cach toi tram gan nhat (km)",
     )
     original_analysis: AIAnalysis
 

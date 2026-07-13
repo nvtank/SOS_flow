@@ -1,28 +1,104 @@
 """
-EmergencyPrioritizer — So sánh và xếp hạng ưu tiên cứu hộ.
+EmergencyPrioritizer — So sanh va xep hang uu tien cuu ho.
 
-Kết hợp 2 tầng:
-  1. Rule-based scoring: tính điểm nhanh, deterministic
-  2. LLM (Bedrock): so sánh ngữ cảnh, giải thích lý do bằng ngôn ngữ tự nhiên
+Ket hop 3 tang:
+  1. Rule-based scoring: tinh diem nhanh, deterministic
+  2. Distance tiebreaker: khi score gan nhau, case xa tram cuu ho hon duoc uu tien
+  3. LLM (Bedrock): so sanh ngu canh, giai thich ly do bang ngon ngu tu nhien
 """
 
 import json
 import logging
+import math
 import os
+import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from .schemas import AIAnalysis, PrioritizedCase, PriorityReport
+from .schemas import AIAnalysis, PrioritizedCase, PriorityReport, RescueStation
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Rescue stations — cac tram cuu ho co dinh (demo Da Nang / Tra Linh)
+# ---------------------------------------------------------------------------
+DEFAULT_RESCUE_STATIONS: list[RescueStation] = [
+    RescueStation(
+        name="UBND Xa Tra Linh",
+        latitude=15.023565,
+        longitude=108.041263,
+        station_type="admin",
+    ),
+    RescueStation(
+        name="PCCC & CNCH Da Nang",
+        latitude=16.035971,
+        longitude=108.213402,
+        station_type="rescue",
+    ),
+    RescueStation(
+        name="Benh vien Da Nang",
+        latitude=16.072259,
+        longitude=108.216008,
+        station_type="medical",
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
+# Haversine distance (pure Python, khong can thu vien ngoai)
+# ---------------------------------------------------------------------------
+_EARTH_RADIUS_KM = 6371.0
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    Tinh khoang cach great-circle giua 2 diem (km).
+    Dung cong thuc Haversine — du chinh xac cho cuu ho.
+    """
+    lat1_r, lat2_r = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_r) * math.cos(lat2_r) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return _EARTH_RADIUS_KM * c
+
+
+def find_nearest_station(
+    lat: float,
+    lon: float,
+    stations: list[RescueStation] | None = None,
+) -> tuple[RescueStation, float]:
+    """
+    Tim tram cuu ho gan nhat.
+
+    Returns:
+        (station, distance_km)
+    """
+    if stations is None:
+        stations = DEFAULT_RESCUE_STATIONS
+
+    best_station = stations[0]
+    best_dist = haversine_km(lat, lon, stations[0].latitude, stations[0].longitude)
+
+    for station in stations[1:]:
+        dist = haversine_km(lat, lon, station.latitude, station.longitude)
+        if dist < best_dist:
+            best_dist = dist
+            best_station = station
+
+    return best_station, round(best_dist, 2)
 
 
 # ---------------------------------------------------------------------------
 # Rule-based scoring
 # ---------------------------------------------------------------------------
 def _score_level(score: float) -> str:
-    """Chuyển điểm số thành mức ưu tiên."""
     if score >= 80:
         return "CRITICAL"
     if score >= 60:
@@ -34,54 +110,70 @@ def _score_level(score: float) -> str:
 
 def rule_based_score(analysis: AIAnalysis) -> float:
     """
-    Tính điểm ưu tiên dựa trên rule cứng (0-100).
+    Tinh diem uu tien dua tren rule cung (0-100).
 
-    Trọng số:
+    Trong so:
       - Trapped:        +30
-      - Injured:        +5 mỗi người (max +25)
-      - Children:       +4 mỗi trẻ (max +16)
-      - Elderly:        +4 mỗi người già (max +16)
-      - Water level:    +3 mỗi 0.5m (max +18)
-      - People:         +1 mỗi người (max +10)
-      - Risks:          +3 mỗi risk (max +15)
-      - Needs:          +2 mỗi need (max +10)
+      - Injured:        +5 moi nguoi (max +25)
+      - Children:       +4 moi tre (max +16)
+      - Elderly:        +4 moi nguoi gia (max +16)
+      - Water level:    +3 moi 0.5m (max +18)
+      - People:         +1 moi nguoi (max +10)
+      - Risks:          +3 moi risk (max +15)
+      - Needs:          +2 moi need (max +10)
     """
     score = 0.0
 
-    # Trapped — yếu tố quan trọng nhất
     if analysis.is_trapped:
         score += 30
 
-    # Injured
     injured = analysis.number_of_injured or 0
     score += min(injured * 5, 25)
 
-    # Vulnerable people
     children = analysis.number_of_children or 0
     score += min(children * 4, 16)
 
     elderly = analysis.number_of_elderly or 0
     score += min(elderly * 4, 16)
 
-    # Water level
     if analysis.water_level is not None and analysis.water_level > 0:
         score += min(analysis.water_level / 0.5 * 3, 18)
 
-    # Total people
     people = analysis.number_of_people or 0
     score += min(people * 1, 10)
 
-    # Risks
     score += min(len(analysis.detected_risks) * 3, 15)
-
-    # Needs
     score += min(len(analysis.needs) * 2, 10)
 
     return min(100.0, round(score, 1))
 
 
-def rule_based_reasoning(analysis: AIAnalysis, score: float) -> str:
-    """Tạo giải thích rule-based đơn giản."""
+def distance_bonus(distance_km: float) -> float:
+    """
+    Tinh diem bonus dua tren khoang cach toi tram cuu ho.
+    Case xa hon can duoc uu tien hon (cuu ho mat nhieu thoi gian hon).
+
+    Scale: 0-8 diem
+      - 0 km    -> 0 diem
+      - 5 km    -> 2 diem
+      - 20 km   -> 4 diem
+      - 50 km   -> 6 diem
+      - 100+ km -> 8 diem
+    """
+    if distance_km <= 0:
+        return 0.0
+    # Logarithmic scaling: bonus = 2 * ln(1 + distance/5), cap at 8
+    bonus = 2.0 * math.log(1.0 + distance_km / 5.0)
+    return min(8.0, round(bonus, 1))
+
+
+def rule_based_reasoning(
+    analysis: AIAnalysis,
+    score: float,
+    station_name: Optional[str] = None,
+    dist_km: Optional[float] = None,
+) -> str:
+    """Tao giai thich rule-based."""
     parts: list[str] = []
 
     if analysis.is_trapped:
@@ -112,6 +204,9 @@ def rule_based_reasoning(analysis: AIAnalysis, score: float) -> str:
     if analysis.needs:
         parts.append(f"can: {', '.join(analysis.needs)}")
 
+    if dist_km is not None and station_name:
+        parts.append(f"cach tram '{station_name}' {dist_km:.1f}km")
+
     if not parts:
         parts.append("khong co thong tin chi tiet")
 
@@ -120,20 +215,66 @@ def rule_based_reasoning(analysis: AIAnalysis, score: float) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Coordinate extraction from text
+# ---------------------------------------------------------------------------
+_COORD_PATTERN = re.compile(
+    r"@\s*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)"
+)
+
+_LATLON_PATTERN = re.compile(
+    r"(?:toa do|tọa độ|vi tri|vị trí|gps)[:\s]*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)",
+    re.IGNORECASE,
+)
+
+
+def extract_coordinates(text: str) -> tuple[Optional[float], Optional[float], str]:
+    """
+    Extract toa do tu text. Ho tro:
+      - "@15.023,108.041" (cuoi bao cao)
+      - "toa do 15.023, 108.041"
+      - "vi tri: 15.023, 108.041"
+
+    Returns:
+        (latitude, longitude, clean_text_without_coord_marker)
+    """
+    # Pattern 1: @lat,lon
+    match = _COORD_PATTERN.search(text)
+    if match:
+        lat = float(match.group(1))
+        lon = float(match.group(2))
+        clean = text[:match.start()].strip()
+        return lat, lon, clean
+
+    # Pattern 2: "toa do lat, lon"
+    match = _LATLON_PATTERN.search(text)
+    if match:
+        lat = float(match.group(1))
+        lon = float(match.group(2))
+        return lat, lon, text
+
+    return None, None, text
+
+
+# ---------------------------------------------------------------------------
 # Prioritizer class
 # ---------------------------------------------------------------------------
 class EmergencyPrioritizer:
     """
-    So sánh nhiều case và xếp hạng ưu tiên.
+    So sanh nhieu case va xep hang uu tien.
 
     mode:
-      - "rule":    chỉ dùng rule-based scoring
-      - "bedrock": rule-based + LLM giải thích (mặc định)
+      - "rule":    chi dung rule-based scoring + distance
+      - "bedrock": rule-based + distance + LLM giai thich (mac dinh)
     """
 
-    def __init__(self, mode: str = "bedrock") -> None:
+    def __init__(
+        self,
+        mode: str = "bedrock",
+        stations: list[RescueStation] | None = None,
+    ) -> None:
         self.mode = mode.lower()
-        self._client = None  # lazy init
+        self.stations = stations or DEFAULT_RESCUE_STATIONS
+        self._client = None
         self._prompt_path = (
             Path(__file__).parent / "prompts" / "priority_system.txt"
         )
@@ -166,13 +307,14 @@ class EmergencyPrioritizer:
         cases: dict[str, AIAnalysis],
     ) -> PriorityReport:
         """
-        Xếp hạng ưu tiên cho nhiều case.
+        Xep hang uu tien cho nhieu case.
 
         Args:
             cases: dict mapping case_id -> AIAnalysis
+                   (AIAnalysis.extracted_location co the co lat/lon)
 
         Returns:
-            PriorityReport với cases đã sắp xếp theo ưu tiên giảm dần
+            PriorityReport voi cases da sap xep theo uu tien giam dan
         """
         if not cases:
             return PriorityReport(
@@ -180,24 +322,54 @@ class EmergencyPrioritizer:
                 overall_summary="Khong co case nao de so sanh.",
             )
 
-        # Bước 1: Rule-based scoring
+        # Buoc 1: Rule-based scoring + distance (with auto-geocoding)
         scored: list[PrioritizedCase] = []
         for case_id, analysis in cases.items():
-            score = rule_based_score(analysis)
-            level = _score_level(score)
-            reasoning = rule_based_reasoning(analysis, score)
+            base_score = rule_based_score(analysis)
+
+            # Auto-geocode if we have address text but no coordinates
+            lat = analysis.extracted_location.latitude
+            lon = analysis.extracted_location.longitude
+
+            if lat is None or lon is None:
+                lat, lon = await self._try_geocode(analysis, case_id)
+
+            # Distance calculation
+            station_name: Optional[str] = None
+            dist_km: Optional[float] = None
+            dist_extra = 0.0
+
+            if lat is not None and lon is not None:
+                station, dist = find_nearest_station(lat, lon, self.stations)
+                station_name = station.name
+                dist_km = dist
+                dist_extra = distance_bonus(dist)
+                logger.info(
+                    "Case %s: lat=%.4f lon=%.4f -> nearest=%s dist=%.1fkm bonus=+%.1f",
+                    case_id, lat, lon, station.name, dist, dist_extra,
+                )
+
+            final_score = min(100.0, round(base_score + dist_extra, 1))
+            level = _score_level(final_score)
+            reasoning = rule_based_reasoning(analysis, final_score, station_name, dist_km)
+
             scored.append(PrioritizedCase(
                 case_id=case_id,
-                priority_score=score,
+                priority_score=final_score,
                 priority_level=level,
                 reasoning=reasoning,
+                nearest_station=station_name,
+                distance_km=dist_km,
                 original_analysis=analysis,
             ))
 
-        # Sắp xếp theo điểm giảm dần
-        scored.sort(key=lambda c: c.priority_score, reverse=True)
+        # Sap xep: score giam dan, neu bang nhau thi xa hon truoc
+        scored.sort(
+            key=lambda c: (c.priority_score, c.distance_km or 0),
+            reverse=True,
+        )
 
-        # Bước 2: LLM comparison (nếu mode=bedrock và có >= 2 case)
+        # Buoc 2: LLM comparison (neu mode=bedrock va co >= 2 case)
         if self.mode == "bedrock" and len(scored) >= 2:
             llm_report = await self._llm_compare(scored)
             if llm_report is not None:
@@ -213,13 +385,58 @@ class EmergencyPrioritizer:
         return PriorityReport(cases=scored, overall_summary=summary)
 
     # ------------------------------------------------------------------
+    # Auto-geocoding
+    # ------------------------------------------------------------------
+    async def _try_geocode(
+        self,
+        analysis: AIAnalysis,
+        case_id: str,
+    ) -> tuple[Optional[float], Optional[float]]:
+        """
+        Thu geocode dia chi tu analysis.extracted_location hoac normalized_message.
+        Neu thanh cong, update lat/lon vao analysis.
+        """
+        from .geocoder import geocode_location_text
+
+        # Thu 1: raw_text tu extracted_location
+        raw_text = analysis.extracted_location.raw_text
+        if raw_text:
+            result = await geocode_location_text(raw_text)
+            if result:
+                lat, lon, display = result
+                analysis.extracted_location.latitude = lat
+                analysis.extracted_location.longitude = lon
+                logger.info(
+                    "Case %s: geocoded '%s' -> (%.6f, %.6f)",
+                    case_id, raw_text, lat, lon,
+                )
+                return lat, lon
+
+        # Thu 2: normalized_message (toan bo bao cao)
+        # Chi thu khi message ngan (< 100 chars) de tranh noise
+        msg = analysis.normalized_message
+        if msg and len(msg) < 100:
+            result = await geocode_location_text(msg)
+            if result:
+                lat, lon, display = result
+                analysis.extracted_location.latitude = lat
+                analysis.extracted_location.longitude = lon
+                logger.info(
+                    "Case %s: geocoded message -> (%.6f, %.6f)",
+                    case_id, lat, lon,
+                )
+                return lat, lon
+
+        return None, None
+
+    # ------------------------------------------------------------------
     # LLM comparison
     # ------------------------------------------------------------------
     async def _llm_compare(
         self,
         scored_cases: list[PrioritizedCase],
     ) -> PriorityReport | None:
-        """Gọi Bedrock để so sánh và giải thích ưu tiên."""
+        """Goi Bedrock de so sanh va giai thich uu tien."""
         client = self._get_bedrock_client()
         if client is None:
             return None
@@ -233,10 +450,10 @@ class EmergencyPrioritizer:
 
         max_tokens = int(os.getenv("BEDROCK_MAX_TOKENS", "2048"))
 
-        # Build user prompt
+        # Build user prompt — include distance info
         cases_json: list[dict[str, Any]] = []
         for case in scored_cases:
-            case_data = {
+            case_data: dict[str, Any] = {
                 "case_id": case.case_id,
                 "rule_score": case.priority_score,
                 "summary": case.original_analysis.summary,
@@ -250,11 +467,16 @@ class EmergencyPrioritizer:
                 "detected_risks": case.original_analysis.detected_risks,
                 "location": case.original_analysis.extracted_location.raw_text,
             }
+            if case.nearest_station and case.distance_km is not None:
+                case_data["nearest_rescue_station"] = case.nearest_station
+                case_data["distance_to_station_km"] = case.distance_km
             cases_json.append(case_data)
 
         user_content = (
             f"Compare the following {len(cases_json)} emergency cases "
-            f"and rank by rescue priority:\n\n"
+            f"and rank by rescue priority.\n"
+            f"Consider distance to rescue station as a tiebreaker "
+            f"when severity scores are similar (farther = harder to reach = higher priority).\n\n"
             f"{json.dumps(cases_json, indent=2, ensure_ascii=False)}\n\n"
             f"Return only valid JSON matching the schema."
         )
@@ -277,7 +499,6 @@ class EmergencyPrioritizer:
             )
             elapsed = time.monotonic() - t0
 
-            # Extract text
             output_msg = response.get("output", {}).get("message", {})
             content_blocks = output_msg.get("content", [])
             text = "\n".join(
@@ -286,7 +507,6 @@ class EmergencyPrioritizer:
             )
             logger.info("Priority comparison OK - %.2fs, %d chars", elapsed, len(text))
 
-            # Parse JSON
             parsed = self._extract_json(text)
             return self._build_report(parsed, scored_cases)
 
@@ -295,9 +515,6 @@ class EmergencyPrioritizer:
             return None
 
     def _extract_json(self, text: str) -> dict[str, Any]:
-        """Extract JSON from response text."""
-        import re
-
         text = text.strip()
         try:
             return json.loads(text)
@@ -326,38 +543,46 @@ class EmergencyPrioritizer:
         llm_data: dict[str, Any],
         scored_cases: list[PrioritizedCase],
     ) -> PriorityReport:
-        """Merge LLM ranking with original analysis data."""
-        # Map case_id -> original analysis
-        case_map = {c.case_id: c.original_analysis for c in scored_cases}
+        """Merge LLM ranking with original data (preserve distance info)."""
+        # Map case_id -> original scored case (with distance info)
+        case_map = {c.case_id: c for c in scored_cases}
 
         ranked = llm_data.get("ranked_cases", [])
         result_cases: list[PrioritizedCase] = []
 
         for item in ranked:
             case_id = item.get("case_id", "")
-            original = case_map.get(case_id)
-            if original is None:
+            original_case = case_map.get(case_id)
+            if original_case is None:
                 continue
 
             score = float(item.get("priority_score", 0))
             level = item.get("priority_level", _score_level(score))
             reasoning = item.get("reasoning", "No reasoning provided.")
 
+            # Append distance info to reasoning if available
+            if original_case.distance_km is not None and original_case.nearest_station:
+                reasoning += (
+                    f" [Distance: {original_case.distance_km:.1f}km"
+                    f" to {original_case.nearest_station}]"
+                )
+
             result_cases.append(PrioritizedCase(
                 case_id=case_id,
                 priority_score=score,
                 priority_level=level,
                 reasoning=reasoning,
-                original_analysis=original,
+                nearest_station=original_case.nearest_station,
+                distance_km=original_case.distance_km,
+                original_analysis=original_case.original_analysis,
             ))
 
-        # Nếu LLM bỏ sót case nào, thêm lại từ rule-based
+        # Neu LLM bo sot case nao, them lai
         seen_ids = {c.case_id for c in result_cases}
         for case in scored_cases:
             if case.case_id not in seen_ids:
                 result_cases.append(case)
 
-        # Sort lại
         result_cases.sort(key=lambda c: c.priority_score, reverse=True)
 
         summary = llm_data.get("overall_summary", "")
