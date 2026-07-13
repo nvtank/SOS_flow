@@ -201,6 +201,8 @@ Current MVP:
 - Chưa tối ưu điều phối theo tuyến đường.
 - Chưa triển khai xác thực production.
 
+Điểm quan trọng: các mục trên là giới hạn có chủ đích để MVP tập trung vào luồng vận hành cốt lõi. Bản demo ưu tiên tính dễ chạy, dễ hiểu và dễ trình bày hơn là mô phỏng đầy đủ hệ thống khẩn cấp production.
+
 Future Development:
 
 - Tích hợp SMS Gateway và đầu số khẩn cấp.
