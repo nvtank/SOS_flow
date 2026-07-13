@@ -88,7 +88,18 @@ class BedrockEmergencyAnalyzer(EmergencyAnalyzer):
         self.client = client
 
     def analyze(self, message: str) -> EmergencyAnalysis:
-        prompt = "Analyze this Vietnamese SOS report. Return only the required tool input; do not invent facts. User report: " + message
+        prompt = """Bạn là bộ trích xuất tin SOS tiếng Việt cho điều phối viên cứu hộ.
+Chỉ gọi tool submit_emergency_analysis. Không thêm diễn giải bên ngoài tool và không bịa dữ kiện.
+
+Yêu cầu bắt buộc:
+- summary và explanation viết bằng tiếng Việt, ngắn gọn, dễ đọc.
+- Trích xuất mọi số lượng/địa điểm được nêu rõ trong tin.
+- detected_risks chỉ dùng các nhãn: trapped, high_water, injury, children, elderly, landslide, disabled_person, pregnant_person. Thêm tất cả nhãn có bằng chứng rõ ràng.
+- missing_information liệt kê các thông tin quan trọng còn thiếu, ví dụ exact_location, number_of_people, contact_method.
+- confidence từ 0 đến 1. Nếu không chắc, dùng null cho trường dữ liệu thay vì suy đoán.
+
+Tin SOS cần phân tích:
+""" + message
         response = self.client.converse(
             modelId=self.model_id,
             messages=[{"role": "user", "content": [{"text": prompt}]}],
@@ -108,8 +119,8 @@ def _safe_error_code(error: Exception) -> str:
     if "timeout" in description: return "TIMEOUT"
     if "thrott" in description: return "THROTTLED"
     if "credential" in description or "auth" in description: return "CREDENTIAL_ERROR"
+    if "access" in description or "model" in description or "inference profile" in description: return "MODEL_ACCESS_ERROR"
     if "validation" in description or "json" in description or "structured" in description or "tool output" in description or "invalid" in description: return "INVALID_STRUCTURED_OUTPUT"
-    if "access" in description or "model" in description: return "MODEL_ACCESS_ERROR"
     return "ANALYZER_ERROR"
 
 

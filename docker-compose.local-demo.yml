@@ -29,12 +29,23 @@ services:
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
       BEDROCK_INFERENCE_PROFILE_ARN: ${BEDROCK_INFERENCE_PROFILE_ARN:-}
       BEDROCK_CUSTOM_MODEL_ARN: ${BEDROCK_CUSTOM_MODEL_ARN:-}
+      BEDROCK_TIMEOUT_SECONDS: ${BEDROCK_TIMEOUT_SECONDS:-12}
+      BEDROCK_MAX_RETRIES: ${BEDROCK_MAX_RETRIES:-2}
       AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-true}
+      # Local-only default credential chain. These values are never baked into
+      # images; production ECS uses its task role instead.
+      AWS_PROFILE: ${AWS_PROFILE:-default}
+      AWS_SDK_LOAD_CONFIG: "1"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     ports:
       - "8001:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
 
   frontend:
     build:

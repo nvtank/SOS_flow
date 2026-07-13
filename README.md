@@ -212,6 +212,14 @@ Dashboard tổng hợp bằng database aggregation: phân bố priority/status/s
 
 Mặc định `AI_PROVIDER=mock`, nên demo không cần AWS. Đặt `AI_PROVIDER=bedrock` cùng model ID hoặc inference profile/custom model ARN để dùng Amazon Bedrock Converse API qua default credential chain của boto3. Output được kiểm tra theo JSON schema/Pydantic; timeout, throttling, quyền model hoặc structured output không hợp lệ sẽ lưu mã lỗi an toàn và fallback sang mock khi `AI_FALLBACK_ENABLED=true`, không làm mất report. AI chỉ lưu suggestion/metadata riêng, không ghi đè dữ liệu người báo đã nhập, không tự giao đội hoặc phát lệnh cứu hộ. Có thể đánh giá dataset tổng hợp 40 mẫu bằng `python3 scripts/evaluate_analyzer.py --provider mock`; xem [hướng dẫn customization](docs/12-bedrock-customization.md) trước khi tạo bất kỳ job có chi phí nào.
 
+Để chứng minh một invocation Bedrock thật (không chấp nhận mock/fallback), cấu hình `AI_PROVIDER=bedrock` và inference profile/model hợp lệ, sau đó chạy:
+
+```bash
+DEMO_TOKEN=sosflow-demo docker compose -p sosflowlocaldemo -f docker-compose.local-demo.yml run --rm --no-deps backend python scripts/verify_bedrock.py
+```
+
+Lệnh chỉ in metadata an toàn. Kết quả phải có `"bedrock_verified": true`, `"provider": "bedrock"` và `"fallback_used": false`. Request Detail cũng hiển thị provider, confidence, latency và fallback để trình bày trực tiếp trên Dashboard.
+
 Request Detail hiển thị tối đa ba đội `AVAILABLE` được chấm điểm minh bạch theo khoảng cách Haversine (đường thẳng, không phải ETA), năng lực, thiết bị, sức chứa và active mission. Điều phối viên vẫn phải bấm assign. Mission hỗ trợ `BLOCKED` và `NEED_REINFORCEMENT`; từng bước (assigned, departed, route blocked, reinforcement, completed/failed...) có MissionEvent với actor, ghi chú, thời điểm và tọa độ tùy chọn.
 
 ### PWA offline-first và vùng im lặng
