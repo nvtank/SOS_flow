@@ -1,0 +1,13 @@
+{
+  "name": "SOSFlow Reporter",
+  "short_name": "SOSFlow",
+  "description": "Ghi nhận SOS ngay cả khi kết nối bị gián đoạn.",
+  "start_url": "/report",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#b91c1c",
+  "icons": [
+    { "src": "/icons/sosflow-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" },
+    { "src": "/icons/sosflow-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
