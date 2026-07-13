@@ -1,0 +1,51 @@
+severity_keywords:
+  life_threatening:
+    score: 30
+    keywords:
+      - "sắp chết"
+      - "không thở được"
+      - "đang chìm"
+      - "nước cuốn"
+      - "bat tinh"
+      - "bất tỉnh"
+  trapped:
+    score: 20
+    keywords:
+      - "mắc kẹt"
+      - "không ra được"
+      - "kẹt trong nhà"
+      - "mac ket"
+  flood_risk:
+    score: 20
+    keywords:
+      - "nước lên nhanh"
+      - "ngập nóc"
+      - "sạt lở"
+      - "nuoc len"
+      - "ngap noc"
+default_severity_score: 5
+people:
+  per_person: 2
+  max_score: 20
+vulnerable:
+  per_child: 5
+  per_elderly: 5
+  disabled_person: 8
+  pregnant_person: 8
+injury:
+  per_injured: 8
+  unconscious: 15
+trapped:
+  score: 15
+water_level:
+  under_0_5: 3
+  from_0_5_to_1_5: 8
+  from_1_5_to_2_5: 15
+  above_2_5: 25
+waiting_time:
+  minutes_per_point: 10
+  max_score: 15
+priority_levels:
+  low_max: 29
+  medium_max: 49
+  high_max: 69
