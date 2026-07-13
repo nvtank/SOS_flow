@@ -25,3 +25,18 @@ Ví dụ: yêu cầu có nội dung "sắp chết", 6 người, 2 trẻ em, 1 ng
 Thời gian chờ: cứ mỗi 10 phút chưa hoàn tất xử lý cộng 1 điểm, tối đa 15 điểm.
 
 AI chỉ hỗ trợ đề xuất. Ban Chỉ huy là người quyết định cuối cùng.
+
+Ví dụ output lưu cùng request:
+
+```json
+{
+  "priority_score": 82,
+  "priority_level": "CRITICAL",
+  "reasons": [
+    "Có 6 người gặp nạn",
+    "Có 2 trẻ em",
+    "Nạn nhân đang mắc kẹt",
+    "Mực nước ước tính từ 2,5 mét trở lên"
+  ]
+}
+```
