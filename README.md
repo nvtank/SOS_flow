@@ -1,306 +1,281 @@
 # SOSFlow
 
-SOSFlow là MVP web hỗ trợ tiếp nhận, phân tích, ưu tiên và điều phối yêu cầu cứu hộ trong thiên tai. Dự án tập trung vào một vấn đề rất cụ thể: khi có quá nhiều lời cầu cứu đến cùng lúc, Ban Chỉ huy cần biết trường hợp nào nguy cấp hơn, vì sao nguy cấp, đã giao cho đội nào và tiến độ cứu hộ hiện đang ở đâu.
+SOSFlow is an emergency-intake and rescue-dispatch MVP for disaster response. It turns incoming SOS reports into an operational queue: reports are normalized, prioritized with explainable rules, reviewed by a command center, assigned to rescue teams, and tracked through mission completion.
 
-SOSFlow không thay thế tổng đài khẩn cấp. Hệ thống đóng vai trò như một lớp điều phối phía sau: gom yêu cầu, chuẩn hóa dữ liệu, tính điểm ưu tiên minh bạch, hiển thị lên dashboard và giúp đội cứu hộ cập nhật trạng thái nhiệm vụ.
+It is designed for a hackathon/local-demo environment, not as a replacement for emergency hotlines or a production emergency-management system.
 
-## Problem Statement
+## What it demonstrates
 
-Trong các đợt bão, lũ quét, sạt lở hoặc ngập lụt, yêu cầu cứu hộ thường tăng đột biến trong thời gian ngắn. Thông tin có thể đến từ cuộc gọi, tin nhắn, mạng xã hội, người thân hoặc chính quyền địa phương. Các yêu cầu này thường không đồng nhất: có người chỉ gửi một câu cầu cứu, có người thiếu địa chỉ, có người ghi sai chính tả, có trường hợp nhiều người cùng báo một sự việc.
+- Two SOS intake modes:
+  - **Structured intake** uses explicit facts entered by the reporter and calculates priority without calling AI.
+  - **Natural-language intake** accepts a single free-text SOS message and uses Amazon Bedrock Converse structured output when configured.
+- A rule-based, explainable Priority Engine with deterministic time aging.
+- A Command Center with operational KPIs, filters, pagination, map markers, source/status charts, and action alerts.
+- Simulated multi-source intake from `WEB`, `CALL_112`, `PHONE`, `SMS`, `ZALO`, `SOCIAL_MEDIA`, `LOCAL_OFFICER`, and `OFFLINE_SYNC`.
+- Explainable duplicate-report candidates; a coordinator decides whether to confirm and merge them.
+- Explainable rescue-team recommendations, manual assignment, controlled mission transitions, and mission event history.
+- An offline-first Reporter PWA backed by IndexedDB and idempotent synchronization.
+- A repeatable Trà Linh flood-and-landslide scenario with silent-zone verification alerts.
 
-Vấn đề vận hành chính:
+> SMS, Zalo, 112, social-media and What3words sources are **simulators** in this MVP. They are not production gateway integrations.
 
-- Tổng đài và điều phối viên dễ bị quá tải khi hàng chục hoặc hàng trăm yêu cầu đến cùng lúc.
-- Dữ liệu rời rạc, thiếu cấu trúc, khó tổng hợp thành một danh sách xử lý thống nhất.
-- Điều phối viên phải tự đọc từng nội dung để đánh giá mức độ nguy hiểm.
-- Không có cách nhất quán để biết yêu cầu nào cần xử lý trước.
-- Thiếu giải thích rõ ràng cho quyết định ưu tiên, gây khó kiểm tra và bàn giao ca trực.
-- Đội cứu hộ khó theo dõi nhiệm vụ được giao và cập nhật tiến độ về trung tâm.
-- Các khu vực Internet yếu hoặc mất tín hiệu khiến thông tin gửi lên không đầy đủ.
+## Quick start
 
-Nếu chỉ có một bản đồ SOS, Ban Chỉ huy biết được "có điểm cần cứu", nhưng vẫn chưa biết điểm nào nguy cấp hơn, vì sao cần ưu tiên, trạng thái xử lý là gì, và đội nào đang phụ trách.
+### Local demo (recommended)
 
-## Proposed Solution
-
-SOSFlow giải quyết bài toán bằng một luồng vận hành đơn giản cho MVP:
-
-1. Người dân gửi yêu cầu cứu hộ qua form web.
-2. Backend kiểm tra dữ liệu và lưu yêu cầu.
-3. Với biểu mẫu có cấu trúc, backend dùng trực tiếp dữ kiện đã nhập; với văn bản tự nhiên, Amazon Bedrock Converse trích xuất JSON có kiểm chứng và fallback an toàn khi nhà cung cấp lỗi.
-4. Rule-based Priority Engine tính điểm ưu tiên dựa trên các yếu tố có thể giải thích.
-5. Command Center Dashboard hiển thị danh sách yêu cầu, bản đồ, điểm ưu tiên, lý do ưu tiên và trạng thái.
-6. Ban Chỉ huy phân công yêu cầu cho đội cứu hộ.
-7. Đội cứu hộ cập nhật tiến độ: `ACCEPTED`, `MOVING`, `ARRIVED`, `RESCUING`, `COMPLETED` hoặc `FAILED`.
-8. Dashboard theo dõi toàn bộ vòng đời từ lúc tiếp nhận đến khi hoàn thành.
-
-Giải pháp cụ thể của MVP:
-
-- Reporter Web: hai luồng rõ ràng — biểu mẫu cố định chấm rule-based không gọi AI, hoặc một ô văn bản tự nhiên được Bedrock phân tích.
-- Command Center: dashboard thống kê, bản đồ, bảng yêu cầu, bộ lọc, chi tiết request và thao tác phân công đội.
-- Rescue Team View: màn hình nhiệm vụ cho đội cứu hộ, có thông tin nạn nhân, vị trí, mức ưu tiên và nút cập nhật trạng thái.
-- Priority Engine: công thức rule-based minh bạch, cấu hình trong `config/priority-rules.yaml`.
-- Bedrock Analyzer: provider thật qua Converse API, structured output, metadata chứng minh model/latency/fallback; mock chỉ là fallback hoặc chế độ local không AWS.
-- Seed data: 10 yêu cầu cứu hộ đủ các mức LOW, MEDIUM, HIGH, CRITICAL và 3 đội cứu hộ.
-
-MVP này chứng minh ba điểm chính: dữ liệu SOS có thể được gom vào một hàng đợi thống nhất, quyết định ưu tiên có thể giải thích được, và tiến độ cứu hộ có thể được cập nhật theo một vòng đời rõ ràng thay vì theo dõi rời rạc qua tin nhắn.
-
-Người dùng chính:
-
-- Reporter: người dân gửi yêu cầu SOS.
-- Command Center: Ban Chỉ huy xem, lọc, đánh giá và phân công yêu cầu.
-- Rescue Team: đội cứu hộ nhận nhiệm vụ và cập nhật trạng thái hiện trường.
-
-## Các thành phần
-
-- SOSFlow Reporter: trang `/report` để gửi yêu cầu cứu hộ.
-- SOSFlow Command Center: dashboard, danh sách yêu cầu, chi tiết yêu cầu và quản lý đội.
-- SOSFlow Rescue: trang `/rescue/{team_id}/missions` để đội cứu hộ xử lý nhiệm vụ được giao.
-
-## Luồng hoạt động
-
-```mermaid
-flowchart LR
-    A[Người dân gửi SOS] --> B[API tiếp nhận]
-    B --> C[Phân tích nội dung]
-    C --> D[Priority Engine]
-    D --> E[Command Center]
-    E --> F[Phân công đội cứu hộ]
-    F --> G[Đội cứu hộ cập nhật trạng thái]
-    G --> E
-```
-
-## Kiến trúc MVP
-
-```mermaid
-flowchart TB
-    Reporter[Reporter Web]
-    Command[Command Center]
-    Rescue[Rescue PWA]
-
-    API[FastAPI Backend]
-    Priority[Priority Engine]
-    AI[Amazon Bedrock Analyzer]
-    Rules[Structured rule-only intake]
-    DB[(PostgreSQL)]
-    Cache[(Redis)]
-    Map[OpenStreetMap]
-
-    Reporter --> API
-    Command --> API
-    Rescue --> API
-
-    API --> Priority
-    API --> AI
-    API --> Rules
-    API --> DB
-    API --> Cache
-
-    Command --> Map
-    Rescue --> Map
-```
-
-Backend là modular monolith để hackathon chạy nhanh và dễ hiểu. Priority Engine vẫn là nguồn điểm chính thức; Bedrock chỉ trích xuất/gợi ý dữ kiện từ lời cầu cứu tự nhiên và không tự giao đội.
-
-## Cơ chế ưu tiên
-
-Priority score được tính từ:
-
-- Mức độ nguy hiểm trong nội dung.
-- Số người gặp nạn.
-- Trẻ em, người cao tuổi, người khuyết tật, phụ nữ mang thai.
-- Số người bị thương và dấu hiệu bất tỉnh.
-- Tình trạng mắc kẹt.
-- Mực nước.
-- Thời gian chờ.
-
-Mức ưu tiên:
-
-- 0-29: LOW
-- 30-49: MEDIUM
-- 50-69: HIGH
-- 70 trở lên: CRITICAL
-
-Ví dụ: một yêu cầu có 6 người, 2 trẻ em, đang mắc kẹt, nước trên 2,5m và nội dung có dấu hiệu nguy hiểm tính mạng sẽ được cộng điểm từ từng yếu tố. Dashboard hiển thị cả số điểm và danh sách lý do để điều phối viên kiểm tra được.
-
-Rules nằm tại `config/priority-rules.yaml`.
-
-## Công nghệ
-
-- Frontend: React, TypeScript, Vite, Tailwind CSS.
-- Map: Leaflet, OpenStreetMap.
-- Backend: Python, FastAPI, SQLAlchemy, Pydantic, Alembic.
-- Database: PostgreSQL trong Docker Compose; SQLite cho local nhanh.
-- Cache placeholder: Redis trong Docker Compose.
-- Container: Docker, Docker Compose.
-
-## Cấu trúc thư mục
-
-```text
-sosflow/
-├── frontend/
-├── backend/
-├── docs/
-├── config/
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
-
-## Hướng dẫn chạy local
+The dedicated demo Compose file avoids exposing PostgreSQL and Redis on their default host ports.
 
 ```bash
 git clone <repository-url>
 cd sosflow
 cp .env.example .env
+DEMO_TOKEN=sosflow-demo docker compose -p sosflowlocaldemo -f docker-compose.local-demo.yml up -d --build
+```
+
+Open:
+
+- Command Center: <http://localhost:5174/admin/dashboard>
+- Reporter: <http://localhost:5174/report>
+- API documentation: <http://localhost:8001/docs>
+
+On the dashboard, select **Start simulation** to play the Trà Linh scenario. The control panel supports pause, next event, inject all, reset, and x1/x2/x5 playback speeds.
+
+### Standard local stack
+
+```bash
 docker compose up --build
 ```
 
-Nếu máy đã dùng các cổng PostgreSQL/Redis mặc định, chạy demo song song mà không chiếm `5432/6379`:
+- Frontend: <http://localhost:5173>
+- Backend: <http://localhost:8000>
+- API documentation: <http://localhost:8000/docs>
 
-```bash
-DEMO_TOKEN=sosflow-demo docker compose -f docker-compose.local-demo.yml up --build
+## Core workflow
+
+```mermaid
+flowchart LR
+    A[Reporter or simulated source] --> B[Intake service]
+    B --> C{Intake mode}
+    C -->|Structured| D[Verified form facts]
+    C -->|Natural language| E[Bedrock or safe mock fallback]
+    D --> F[Rule-based Priority Engine]
+    E --> F
+    F --> G[Command Center]
+    G --> H[Coordinator assigns a rescue team]
+    H --> I[Mission lifecycle and audit events]
+    I --> G
 ```
 
-Khi đó mở frontend tại `http://localhost:5174`, backend tại `http://localhost:8001`, rồi vào Dashboard và bấm **Start x1** trong Demo control.
+SOSFlow is a modular FastAPI monolith. The Priority Engine is the source of truth for priority. AI extracts and suggests information from natural language; it never automatically assigns a team or initiates a rescue mission.
 
-Địa chỉ:
+## Main capabilities
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-- API docs: http://localhost:8000/docs
+### Explainable priority and aging
 
-Chạy test priority engine local:
+Priority uses transparent rules configured in [`config/priority-rules.yaml`](config/priority-rules.yaml). Inputs include people affected, children, elderly people, injuries, trapped status, water level, vulnerable people, message risks, and waiting time.
 
-```bash
-cd backend
-PYTHONPATH=. pytest
+Priority levels are:
+
+| Score | Level |
+| --- | --- |
+| 0–29 | `LOW` |
+| 30–49 | `MEDIUM` |
+| 50–69 | `HIGH` |
+| 70+ | `CRITICAL` |
+
+All backend timestamps are UTC ISO 8601. Aging accepts an explicit `now` value in the engine for deterministic tests. Open requests are refreshed at a controlled interval when lists, details, or statistics are loaded, avoiding a database write for every GET request.
+
+### Data integrity and mission lifecycle
+
+- Human-readable request codes use database identity plus a short UUID token, for example `SOS-20260713-000123-ABCDEF123456`.
+- Idempotency is enforced with `client_submission_id` or `source + external_reference`.
+- Assignment runs in a transaction and rejects offline teams, teams with an active mission, duplicate assignment, and completed requests.
+- A request and a rescue team can each have at most one active mission.
+- Every status change and priority recalculation produces audit history.
+
+The mission state machine is intentionally constrained:
+
+```text
+PENDING_VERIFICATION → VERIFIED → ASSIGNED → ACCEPTED → MOVING → ARRIVED → RESCUING → COMPLETED | FAILED
+                                                │                    │
+                                                └→ BLOCKED → MOVING  └→ NEED_REINFORCEMENT → RESCUING
 ```
 
-Trước khi chạy backend trên database hiện có, áp dụng migration một lần:
+Invalid reverse or skipped transitions are rejected by the backend.
 
-```bash
-cd backend
-PYTHONPATH=. alembic upgrade head
+### Duplicate detection and incident merge
+
+Duplicate candidates use explainable signals: coordinate distance, received time, normalized address, phone number, normalized Vietnamese text, and extracted risk/entity information. The system returns a score, confidence level, candidate report, and human-readable reasons.
+
+SOSFlow does **not** merge reports automatically. A coordinator confirms or rejects a suggestion, then optionally merges a report into a canonical incident. The original report and its audit trail are preserved.
+
+### Team recommendations
+
+The recommendation service ranks teams using availability, straight-line Haversine distance, vehicle type, capacity, capabilities, equipment, location freshness, and active workload. The distance shown is explicitly **not** a road ETA. A coordinator must manually approve assignment.
+
+### Offline Reporter PWA
+
+The React frontend is built as static assets and includes a Reporter-focused service worker. API responses are not cached. When offline, reports are stored in IndexedDB with a stable `client_submission_id`; when connectivity returns, the browser retries through the normal intake pipeline as `OFFLINE_SYNC`.
+
+The sync strategy uses online events, a manual **Sync now** button, retry/backoff, and backend idempotency. It does not rely solely on Background Sync API support.
+
+## Amazon Bedrock
+
+### Default behavior
+
+`AI_PROVIDER=mock` is the default and needs no AWS account. It keeps the local demo usable when Bedrock is unavailable.
+
+To use Bedrock, set the following values in your local `.env` or deployment environment:
+
+```env
+AI_PROVIDER=bedrock
+AWS_REGION=ap-southeast-1
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+# Optional, use one when applicable:
+BEDROCK_INFERENCE_PROFILE_ARN=
+BEDROCK_CUSTOM_MODEL_ARN=
+AI_FALLBACK_ENABLED=true
 ```
 
-### Quyết định aging
+The backend uses the boto3 default credential chain. Use an IAM role in AWS deployments; do not commit access keys to `.env` files.
 
-Backend lưu tất cả timestamp ở UTC và API tuần tự hóa chúng theo ISO 8601 có hậu tố `Z`; frontend dùng `Date`/`toLocaleString` để hiển thị múi giờ thiết bị. Aging được tính bằng tham số `now` của Priority Engine. Khi tải danh sách, chi tiết hoặc statistics, backend chỉ refresh các request chưa kết thúc có `priority_calculated_at` cũ hơn 5 phút. Vì vậy điểm chờ tăng theo thời gian nhưng GET không ghi database liên tục. Test có thể truyền thời gian giả lập trực tiếp vào engine.
+Bedrock requests use Converse API structured output validated by Pydantic. Timeout, throttling, credential/model-access, and invalid-JSON/schema failures record a safe error code and fall back to the mock analyzer when fallback is enabled. A failed AI call never discards an SOS report.
 
-### Vòng đời và tính toàn vẹn
-
-Request code có dạng `SOS-YYYYMMDD-000123-<token>`: phần ID hỗ trợ đọc và sắp xếp, token UUID ngắn loại trừ va chạm ngay cả với SQLite cũ có thể tái sử dụng ID sau khi xóa. Request chỉ chuyển theo ma trận `PENDING_VERIFICATION → VERIFIED → ASSIGNED → ACCEPTED → MOVING → ARRIVED → RESCUING → COMPLETED|FAILED`. Xác minh dùng API cập nhật request; assignment và các trạng thái sau đó chỉ đi qua transaction service tương ứng. Mỗi bước tạo `StatusHistory`; các lần tính lại priority cũng được ghi audit với trạng thái giữ nguyên. Database có partial unique index để một request và một team chỉ có tối đa một mission đang hoạt động.
-
-### Multi-source simulator và báo cáo trùng
-
-`WEB`, `CALL_112`, `PHONE`, `SMS`, `ZALO`, `SOCIAL_MEDIA`, `LOCAL_OFFICER` và `OFFLINE_SYNC` đều đi qua một intake service. Đây là **simulator**: SOSFlow không kết nối SMS gateway, Zalo API, tổng đài 112 hoặc What3words API thật trong MVP này.
-
-Idempotency dùng `client_submission_id` hoặc cặp `source` + `external_reference`; retry trả về report cũ. Sau khi nhận tin, engine tạo đề xuất `POSSIBLE_DUPLICATE` có điểm/lý do giải thích từ vị trí, thời điểm, địa chỉ, điện thoại, nội dung chuẩn hóa và tín hiệu rule-AI. Không có auto-merge: admin phải xác nhận rồi mới gộp report vào canonical incident; report gốc và audit history luôn được giữ lại.
-
-Để chạy cảnh demo nhiều nguồn:
-
-```bash
-DEMO_MODE=true DEMO_TOKEN=sosflow-demo docker compose up --build
-python3 scripts/simulate_disaster.py --token sosflow-demo
-```
-
-Script bơm 12 report qua API thật, trong đó có 112/SMS/cán bộ/offline sync và ba report cùng khu vực Thôn 3, Xã Trà Linh, thành phố Đà Nẵng. Demo endpoint chỉ được mount khi `DEMO_MODE=true` và cần header `X-Demo-Token`. Điểm `///slipped.awkward.scarecrow` được giữ như một liên kết What3words trong report demo để mở trực tiếp từ popup; không tự suy diễn tọa độ khi chưa có API key What3words.
-
-### Command Center Dashboard
-
-Dashboard tổng hợp bằng database aggregation: phân bố priority/status/source, chuỗi tin báo 24 giờ (và theo phút khi demo), thời gian chờ/giao đội/đến hiện trường/hoàn tất trung bình, đội khả dụng và cảnh báo vận hành. Trong `DEMO_MODE=true`, Dashboard polling mỗi 5 giây và tự dừng khi rời trang; ngoài demo chỉ làm mới thủ công. Bản đồ fit theo các marker hiện có, giảm độ nổi bật report đã đóng, không lỗi khi thiếu tọa độ và cho phép click mở Request Detail.
-
-### Bedrock analyzer và gợi ý đội
-
-`/report` có hai chế độ. `STRUCTURED` nhận họ tên, số người lớn/trẻ em và độ sâu; backend tự tính tổng người, ghi `provider=rule_based`, `ai_invoked=false` rồi chạy Priority Engine. `NATURAL_LANGUAGE` chỉ nhận một đoạn cầu cứu và gọi Amazon Bedrock Converse; với suggestion có confidence từ 0,65 trở lên, backend tự điền các trường còn thiếu trước khi tính priority. Metadata lưu `requested_provider`, provider thực tế, model, latency, `bedrock_succeeded`, fallback và danh sách trường đã áp dụng để chứng minh trực tiếp trên web.
-
-Mặc định `AI_PROVIDER=mock`, nên local vẫn chạy không cần AWS. Đặt `AI_PROVIDER=bedrock` cùng model ID hoặc inference profile/custom model ARN để dùng Bedrock qua default credential chain của boto3. Timeout, throttling, quyền model hoặc structured output không hợp lệ lưu mã lỗi an toàn và fallback sang mock khi `AI_FALLBACK_ENABLED=true`, không làm mất report. Dữ liệu reporter/điều phối nhập trực tiếp luôn được ưu tiên; re-analysis không ghi đè dữ liệu đã xác minh. AI không tự giao đội hoặc phát lệnh cứu hộ.
-
-Trong phạm vi demo Trà Linh/Đà Nẵng, địa danh đã biết được đối chiếu qua gazetteer cố định để tạo tọa độ tham chiếu và tính Haversine tới đội cứu hộ. Metadata ghi rõ `provider=demo_gazetteer` và `is_production_geocoder=false`; đây không phải geocoder production và không tuyên bố là vị trí GPS chính xác của nạn nhân.
-
-Để chứng minh một invocation Bedrock thật (không chấp nhận mock/fallback), cấu hình `AI_PROVIDER=bedrock` và inference profile/model hợp lệ, sau đó chạy:
+To verify a real Bedrock invocation after configuring valid IAM/model access:
 
 ```bash
 DEMO_TOKEN=sosflow-demo docker compose -p sosflowlocaldemo -f docker-compose.local-demo.yml run --rm --no-deps backend python scripts/verify_bedrock.py
 ```
 
-Lệnh chỉ in metadata an toàn. Kết quả phải có `"bedrock_verified": true`, `"provider": "bedrock"` và `"fallback_used": false`. Request Detail cũng hiển thị provider, confidence, latency và fallback để trình bày trực tiếp trên Dashboard.
+The result should contain `"bedrock_verified": true`, `"provider": "bedrock"`, and `"fallback_used": false`.
 
-Request Detail hiển thị tối đa ba đội `AVAILABLE` được chấm điểm minh bạch theo khoảng cách Haversine (đường thẳng, không phải ETA), năng lực, thiết bị, sức chứa và active mission. Điều phối viên vẫn phải bấm assign. Mission hỗ trợ `BLOCKED` và `NEED_REINFORCEMENT`; từng bước (assigned, departed, route blocked, reinforcement, completed/failed...) có MissionEvent với actor, ghi chú, thời điểm và tọa độ tùy chọn.
+The optional standalone toolkit in [`ai/`](ai/README.md) contains evaluation assets and CLI helpers. The production web flow remains the backend implementation in `backend/app/services/ai_analyzer.py`.
 
-Xem [kịch bản demo hai luồng AI](docs/15-dual-intake-bedrock-demo.md) để kiểm tra Bedrock thật, rule-only, geocoding demo và vòng đời giao đội.
+## Trà Linh demo scenario
 
-### PWA offline-first và vùng im lặng
+With `DEMO_MODE=true`, the dashboard runs a deterministic 12-event scenario for a flood and landslide at Trà Linh, Đà Nẵng. It includes:
 
-Reporter là PWA có manifest, service worker, offline shell và icon placeholder. Container frontend phục vụ chính bundle React build tĩnh, nên service worker hoạt động cả ở URL demo local; nó chỉ cache application shell/static asset và **không cache API**, vì response quản trị có thể nhạy cảm. Khi mất mạng, form SOS được lưu ở IndexedDB với mã `LOCAL-...`, `client_submission_id`, payload, retry/error state; reload không làm mất queue. Khi có mạng, listener online hoặc nút **Đồng bộ ngay** gửi lại qua pipeline chuẩn với `source=OFFLINE_SYNC`, giữ `received_at` tại thiết bị và `synced_at` phía server. Retry giữ nguyên idempotency key ban đầu để ngăn tạo trùng record. Attachment và audio transcription chưa được triển khai.
+- Simulated 112, SMS, Web, Zalo, local-officer, phone, social-media, and delayed offline reports.
+- A critical report involving children.
+- Missing-location and typo-heavy reports.
+- Duplicate candidates near the same incident.
+- A critical report without an assigned team.
+- A blocked mission and a reinforcement request.
+- A silent zone that requires verification.
 
-Silent zone chỉ là cảnh báo **cần xác minh**: khu vực có hazard đang active nhưng vượt ngưỡng không có tin. Dashboard vẽ layer riêng, hiển thị thời gian im lặng và audit các quyết định `VERIFYING`, `SAFE`, `NEED_RESCUE`; không kết luận khu vực chắc chắn có nạn nhân.
+Events always enter through the real API and the same intake, duplicate, priority, and mission services used by the application.
 
-Trong `DEMO_MODE=true`, Dashboard có control panel scenario “Lũ quét và sạt lở Trà Linh”: Start, Pause, event kế tiếp, bơm tất cả, Reset và speed x1/x2/x5. Events đi qua API thật; reset chỉ xóa report/team/zone simulator. Xem [live demo script](docs/13-live-demo-script.md) để trình bày 3–5 phút.
+For a presenter script, see [the live demo guide](docs/13-live-demo-script.md). For the latest verification evidence, see [demo readiness QA](docs/16-demo-readiness-qa.md).
 
-Xem [Current MVP](docs/14-current-mvp.md) để biết chính xác phần đã triển khai, demo accounts (MVP chưa có authentication), Bedrock setup, hướng AWS deployment và giới hạn hiện tại.
+## Architecture
 
-Kết quả regression và browser verification gần nhất nằm trong [Demo readiness QA](docs/16-demo-readiness-qa.md).
+```mermaid
+flowchart TB
+    Reporter[Reporter PWA]
+    Command[Command Center]
+    Rescue[Rescue team view]
+    API[FastAPI modular monolith]
+    AI[Bedrock analyzer / mock fallback]
+    Priority[Priority Engine]
+    DB[(PostgreSQL or SQLite)]
+    Map[Leaflet + OpenStreetMap]
 
-## API chính
+    Reporter --> API
+    Command --> API
+    Rescue --> API
+    API --> AI
+    API --> Priority
+    API --> DB
+    Command --> Map
+    Rescue --> Map
+```
 
-- `POST /api/rescue-requests`: Reporter gửi yêu cầu SOS.
-- `GET /api/rescue-requests/{request_code}/status`: xem trạng thái yêu cầu.
-- `GET /api/admin/rescue-requests`: danh sách phân trang (`items`, `page`, `page_size`, `total`), filter và sort.
-- `GET /api/admin/rescue-requests/{id}`: chi tiết yêu cầu.
-- `PATCH /api/admin/rescue-requests/{id}`: cập nhật thông tin.
-- `POST /api/admin/rescue-requests/{id}/reanalyze`: chạy lại analyzer, chỉ cập nhật AI suggestion.
-- `GET /api/admin/rescue-requests/{id}/team-recommendations`: tối đa ba đề xuất đội có lý do/cảnh báo.
-- `GET /api/admin/rescue-requests/{id}/timeline`: lịch sử trạng thái/audit recalculation.
-- `GET /api/admin/rescue-requests/{id}/duplicates`: các đề xuất trùng có điểm và lý do.
-- `POST /api/admin/rescue-requests/{id}/duplicates/{candidate_id}/confirm|reject`: quyết định của admin.
-- `POST /api/admin/rescue-requests/{id}/merge`: gộp report đã xác nhận vào canonical incident, không xóa report gốc.
-- `POST /api/admin/rescue-requests/{id}/assign`: phân công đội.
-- `GET /api/admin/statistics`: thống kê dashboard.
-- `GET /api/admin/silent-zones`: các khu vực cần xác minh; `PATCH /api/admin/silent-zones/{id}/verification` ghi audit.
-- `GET /api/rescue-teams`: danh sách đội.
-- `GET /api/missions/{id}/events`: timeline event của nhiệm vụ.
-- `POST /api/rescue-teams`: tạo đội.
-- `GET /api/rescue-teams/{id}/missions`: nhiệm vụ của đội.
-- `PATCH /api/missions/{id}/status`: đội cứu hộ cập nhật trạng thái.
+PostgreSQL is the preferred database because SOS reports, teams, missions, histories, duplicate candidates, and silent zones are relational. SQLite is supported for fast local development and tests. PostGIS is a future option for production-grade spatial queries.
 
-## Demo scenario
+## Technology stack
 
-1. Mở `/report` và gửi tin SOS.
-2. Backend phân tích nội dung, tính điểm và lưu request.
-3. Mở `/admin/dashboard`, yêu cầu mới xuất hiện trên bảng và bản đồ.
-4. Vào `/admin/requests/{id}`, xem lý do ưu tiên và giao đội.
-5. Mở `/rescue/{team_id}/missions`, đội cứu hộ cập nhật `ACCEPTED`, `MOVING`, `ARRIVED`, `RESCUING`.
-6. Cập nhật `COMPLETED`, dashboard ghi nhận nhiệm vụ hoàn thành.
-7. Trong demo mode, bấm **Bắt đầu mô phỏng** để các event tự đi vào theo tốc độ x1/x2/x5; vẫn có thể Pause, step từng event, bơm tất cả và reset an toàn.
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS, Leaflet
+- **Backend:** Python, FastAPI, SQLAlchemy, Pydantic, Alembic
+- **Database:** PostgreSQL (Docker) or SQLite
+- **AI:** Amazon Bedrock Converse API with a mock fallback
+- **Offline storage:** IndexedDB
+- **Containers:** Docker and Docker Compose
 
-## Giới hạn của MVP
+## Repository layout
 
-Current MVP:
+```text
+sosflow/
+├── frontend/                 # Static React PWA build
+├── backend/                  # FastAPI application, migrations, tests
+├── ai/                       # Optional analyzer evaluation toolkit and datasets
+├── config/                   # Priority rules
+├── docs/                     # MVP scope, demo script, QA evidence
+├── scripts/                  # Simulator, Bedrock verification, evaluation
+├── docker-compose.yml
+├── docker-compose.local-demo.yml
+└── .env.example
+```
 
-- Chưa tích hợp SMS Gateway thật.
-- Chưa tích hợp Zalo API thật.
-- Chưa xử lý cuộc gọi thật.
-- Bedrock chỉ hoạt động khi có IAM/model access; mặc định vẫn là mock fallback.
-- Chưa có dữ liệu thời tiết thời gian thực.
-- Chưa tối ưu điều phối theo tuyến đường.
-- Chưa triển khai xác thực production.
+## API overview
 
-Điểm quan trọng: các mục trên là giới hạn có chủ đích để MVP tập trung vào luồng vận hành cốt lõi. Bản demo ưu tiên tính dễ chạy, dễ hiểu và dễ trình bày hơn là mô phỏng đầy đủ hệ thống khẩn cấp production.
+| Area | Endpoint examples |
+| --- | --- |
+| Intake | `POST /api/rescue-requests` |
+| Request status | `GET /api/rescue-requests/{request_code}/status` |
+| Admin requests | `GET/PATCH /api/admin/rescue-requests/{id}` |
+| Re-analysis | `POST /api/admin/rescue-requests/{id}/reanalyze` |
+| Timeline | `GET /api/admin/rescue-requests/{id}/timeline` |
+| Duplicates | `GET /api/admin/rescue-requests/{id}/duplicates` and confirm/reject/merge actions |
+| Team recommendations | `GET /api/admin/rescue-requests/{id}/team-recommendations` |
+| Assignment | `POST /api/admin/rescue-requests/{id}/assign` |
+| Dashboard statistics | `GET /api/admin/statistics` |
+| Silent zones | `GET /api/admin/silent-zones` and verification update |
+| Rescue missions | `GET /api/rescue-teams/{id}/missions`, `PATCH /api/missions/{id}/status` |
+| Mission events | `GET /api/missions/{id}/events` |
 
-Future Development:
+Open `/docs` on the backend for the request and response schemas.
 
-- Tích hợp SMS Gateway và đầu số khẩn cấp.
-- Tích hợp Zalo và các nguồn mạng xã hội.
-- Chuyển giọng nói thành dữ liệu có cấu trúc.
-- Đánh giá/fine-tune Bedrock bằng dataset đã được duyệt khi baseline thật sự chưa đủ tốt.
-- Nâng duplicate detection từ heuristic giải thích được lên mô hình ngữ nghĩa sau khi có dữ liệu đánh giá.
-- Tích hợp dữ liệu thời tiết và cảnh báo thiên tai.
-- Tích hợp routing/ETA thực tế thay cho khoảng cách Haversine đường thẳng.
-- Đưa audit log sang kho lưu trữ bất biến/retention policy cho production.
-- Phân quyền theo cơ quan và địa phương.
-- Triển khai trên AWS.
-- Mở rộng bằng Kubernetes khi số lượng người dùng và yêu cầu tăng.
-- Mở rộng sang cháy nổ, tai nạn giao thông, cấp cứu y tế và tìm kiếm người mất tích.
+## Tests and verification
 
-Demo accounts: chưa có. MVP chưa triển khai authentication/authorization production.
+Run the backend suite from the demo stack:
+
+```bash
+docker compose -p sosflowlocaldemo -f docker-compose.local-demo.yml exec -T backend pytest -q
+```
+
+The backend tests force the mock analyzer so they are deterministic and do not consume AWS Bedrock invocations. Bedrock-specific tests use fake Converse clients; real Bedrock proof is kept in `scripts/verify_bedrock.py`.
+
+Build the frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
+Run schema/data checks or mock evaluation:
+
+```bash
+python scripts/evaluate_analyzer.py --provider mock
+```
+
+## Important limitations
+
+- This MVP has no production authentication or authorization. Do not expose it publicly as-is.
+- SMS, Zalo, 112, social-media, and What3words flows are simulated.
+- Silent zones mean **contact needs verification**, not that an incident is confirmed.
+- Team distance is Haversine straight-line distance, not routing or estimated arrival time.
+- OpenStreetMap tiles need an Internet connection; reports without coordinates remain available in the API and table.
+- Photo attachments, audio transcription, and Background Sync API support are not implemented.
+- The repository does not include Terraform/CDK or a production AWS deployment definition.
+
+## Further documentation
+
+- [Current MVP scope and deployment notes](docs/14-current-mvp.md)
+- [Live demo script](docs/13-live-demo-script.md)
+- [Demo readiness QA](docs/16-demo-readiness-qa.md)
+- [Bedrock customization readiness](docs/12-bedrock-customization.md)
+- [AI evaluation toolkit](ai/README.md)
+
+## License
+
+This repository is intended for project and hackathon demonstration use.
