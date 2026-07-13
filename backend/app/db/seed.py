@@ -1,11 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import RescueRequest, RescueTeam, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
-from app.services.rescue_service import create_rescue_request
+from app.core.time import utc_now
+from app.models.entities import RequestStatus
+from app.services.rescue_service import create_rescue_request, transition_request
 
 
 def seed_database(db: Session) -> None:
@@ -13,9 +15,9 @@ def seed_database(db: Session) -> None:
         return
 
     teams = [
-        RescueTeam(name="Đội Xuồng Cứu Hộ 01", phone_number="0901000001", member_count=6, vehicle_type="Xuồng máy", latitude=16.0471, longitude=108.2068, status=TeamStatus.AVAILABLE.value),
-        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", latitude=16.0602, longitude=108.223, status=TeamStatus.BUSY.value),
-        RescueTeam(name="Đội Leo Dây 03", phone_number="0901000003", member_count=5, vehicle_type="Xe bán tải", latitude=16.031, longitude=108.19, status=TeamStatus.OFFLINE.value),
+        RescueTeam(name="Đội Xuồng Cứu Hộ 01", phone_number="0901000001", member_count=6, vehicle_type="Xuồng máy", latitude=16.0471, longitude=108.2068, current_latitude=16.0471, current_longitude=108.2068, capabilities=["flood_rescue", "medical"], equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=12, status=TeamStatus.AVAILABLE.value),
+        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", latitude=16.0602, longitude=108.223, current_latitude=16.0602, current_longitude=108.223, capabilities=["medical"], equipment=["cáng", "oxy", "túi sơ cứu"], max_people_capacity=4, status=TeamStatus.BUSY.value),
+        RescueTeam(name="Đội Leo Dây 03", phone_number="0901000003", member_count=5, vehicle_type="Xe bán tải", latitude=16.031, longitude=108.19, current_latitude=16.031, current_longitude=108.19, capabilities=["landslide"], equipment=["dây thừng", "mũ bảo hộ"], max_people_capacity=5, status=TeamStatus.OFFLINE.value),
     ]
     db.add_all(teams)
     db.commit()
@@ -34,9 +36,11 @@ def seed_database(db: Session) -> None:
     ]
     created = []
     for sample in samples:
-        created.append(create_rescue_request(db, sample))
+        request = create_rescue_request(db, sample)
+        transition_request(db, request, RequestStatus.VERIFIED.value, "seed", "Seed request verified")
+        created.append(request)
 
     # Spread creation times so waiting-time scoring and table sorting feel realistic.
     for index, request in enumerate(db.scalars(select(RescueRequest)).all()):
-        request.created_at = datetime.utcnow() - timedelta(minutes=index * 7)
+        request.created_at = utc_now() - timedelta(minutes=index * 7)
     db.commit()

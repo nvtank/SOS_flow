@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from app.core.time import as_utc, utc_now
+
 
 @dataclass
 class PriorityInput:
@@ -23,7 +25,7 @@ class PriorityEngine:
     def __init__(self, rules_path: Path):
         self.rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
 
-    def calculate(self, data: PriorityInput) -> dict:
+    def calculate(self, data: PriorityInput, now: datetime | None = None) -> dict:
         score = 0
         reasons: list[str] = []
         message = (data.message or "").lower()
@@ -76,7 +78,8 @@ class PriorityEngine:
             reasons.append(water_reason)
 
         if data.created_at:
-            waited_minutes = max(0, int((datetime.utcnow() - data.created_at).total_seconds() // 60))
+            calculation_time = as_utc(now or utc_now())
+            waited_minutes = max(0, int((calculation_time - as_utc(data.created_at)).total_seconds() // 60))
             waiting_score = min(waited_minutes // self.rules["waiting_time"]["minutes_per_point"], self.rules["waiting_time"]["max_score"])
             if waiting_score:
                 score += waiting_score
