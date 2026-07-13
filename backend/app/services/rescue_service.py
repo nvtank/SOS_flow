@@ -1,3 +1,5 @@
+import asyncio
+import os
 from datetime import datetime
 
 from fastapi import HTTPException
@@ -7,8 +9,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.config import get_settings
 from app.models.entities import MissionStatus, RequestStatus, RescueMission, RescueRequest, RescueTeam, StatusHistory, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
-from app.services.ai_analyzer import MockEmergencyAnalyzer
 from app.services.priority_engine import PriorityEngine, PriorityInput
+from app.ai import AIAnalyzerFactory
 
 
 def _next_request_code(db: Session) -> str:
@@ -17,15 +19,20 @@ def _next_request_code(db: Session) -> str:
 
 
 def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRequest:
-    analyzer = MockEmergencyAnalyzer()
+    ai_mode = os.getenv("SOSFLOW_AI_MODE", "mock")
+    analyzer = AIAnalyzerFactory.create(ai_mode)
     settings = get_settings()
     engine = PriorityEngine(settings.rules_path)
     created_at = datetime.utcnow()
     priority = engine.calculate(PriorityInput(**payload.model_dump(exclude={"note", "source"}), created_at=created_at))
+    ai_analysis = analyzer.analyze(payload.message)
+    if asyncio.iscoroutine(ai_analysis):
+        ai_analysis = asyncio.run(ai_analysis)
+
     request = RescueRequest(
         request_code=_next_request_code(db),
         **payload.model_dump(exclude={"note"}),
-        ai_analysis=analyzer.analyze(payload.message),
+        ai_analysis=ai_analysis.model_dump(),
         priority_score=priority["priority_score"],
         priority_level=priority["priority_level"],
         priority_reasons=priority["reasons"],

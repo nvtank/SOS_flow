@@ -1,0 +1,66 @@
+[
+  {
+    "input": "Có 6 người mắc kẹt trong nhà, 2 trẻ em, cần thuốc và nước uống.",
+    "expected": {
+      "people": 6,
+      "injured": null,
+      "trapped": true
+    }
+  },
+  {
+    "input": "Một người bị thương, ngập nước, không ra được.",
+    "expected": {
+      "people": null,
+      "injured": 1,
+      "trapped": true
+    }
+  },
+  {
+    "input": "Có 3 người, 1 trẻ em, cần lương thực và nước.",
+    "expected": {
+      "people": 3,
+      "injured": null,
+      "trapped": null
+    }
+  },
+  {
+    "input": "Nhà tôi ở xã Tân Bình, bị ngập 1.2 mét, 4 người và 1 người bị thương, không có điện.",
+    "expected": {
+      "people": 4,
+      "injured": 1,
+      "trapped": null
+    }
+  },
+  {
+    "input": "Chúng tôi bị kẹt dưới cầu, 5 người không ra được, 2 em nhỏ và 1 người bị thương.",
+    "expected": {
+      "people": 5,
+      "injured": 1,
+      "trapped": true
+    }
+  },
+  {
+    "input": "Báo cáo: 2 người lớn, 1 trẻ em, nước dâng cao, cần cứu giúp nhưng không có bị thương rõ ràng.",
+    "expected": {
+      "people": 2,
+      "injured": null,
+      "trapped": null
+    }
+  },
+  {
+    "input": "Xe bị mắc kẹt trên đường, có 1 người bị thương, cần thuốc ngay.",
+    "expected": {
+      "people": null,
+      "injured": 1,
+      "trapped": true
+    }
+  },
+  {
+    "input": "Tôi ở phường 5, 8 người bị mắc kẹt do sạt lở đất và nước, cần cứu hộ ngay.",
+    "expected": {
+      "people": 8,
+      "injured": null,
+      "trapped": true
+    }
+  }
+]
