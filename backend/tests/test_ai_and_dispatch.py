@@ -163,6 +163,24 @@ def test_bedrock_short_life_threat_message_does_not_invent_location_or_trapped_s
     assert {"exact_location", "number_of_people"}.issubset(result.missing_information)
 
 
+def test_bedrock_keeps_landmark_raw_but_does_not_copy_it_to_every_admin_level():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(
+                extracted_location={"raw_text": "VKU", "province": "VKU", "district": "VKU", "commune": "VKU", "village": "VKU"},
+                detected_risks=["life_threatening"],
+            )
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Tôi sắp chết rồi, tôi ở VKU")
+
+    assert result.extracted_location.raw_text == "VKU"
+    assert result.extracted_location.province is None
+    assert result.extracted_location.district is None
+    assert result.extracted_location.commune is None
+    assert result.extracted_location.village is None
+
+
 @pytest.mark.parametrize("failure", [ValueError("invalid json"), TimeoutError("too slow")])
 def test_bedrock_failures_fall_back_without_losing_analysis(monkeypatch, failure):
     class FailingAnalyzer:

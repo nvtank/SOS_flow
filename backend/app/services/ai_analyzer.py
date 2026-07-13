@@ -57,6 +57,19 @@ def _preserve_explicit_facts(payload: dict[str, Any], message: str) -> None:
         # A model occasionally copies the whole SOS sentence into raw_text.
         # Without any location cue, every location field must remain unknown.
         location = {field: None for field in ("raw_text", "province", "district", "commune", "village")}
+    else:
+        # Do not let a bare landmark/acronym (for example "VKU") become every
+        # administrative level. Keep it as raw_text unless the report names
+        # the corresponding type explicitly.
+        administrative_evidence = {
+            "province": r"\b(?:tỉnh|thành\s+phố|tp\.?)\b",
+            "district": r"\b(?:quận|huyện)\b",
+            "commune": r"\b(?:xã|phường|thị\s+trấn)\b",
+            "village": r"\b(?:thôn|ấp|làng|bản)\b",
+        }
+        for field, pattern in administrative_evidence.items():
+            if not re.search(pattern, normalized):
+                location[field] = None
     payload["extracted_location"] = location
 
     location_match = re.search(r"\b(đường\s+[^,.;]+(?:\s*,\s*[^,.;]+)?)", message, flags=re.IGNORECASE)
