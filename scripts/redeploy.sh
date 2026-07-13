@@ -72,7 +72,7 @@ log "Backend redeployed on EC2"
 info "Rebuilding frontend..."
 cd "$FRONTEND_DIR"
 npm ci --silent
-VITE_API_BASE_URL="$ALB_URL" \
+VITE_API_BASE_URL="" \
 VITE_DEMO_MODE="true" \
 VITE_DEMO_TOKEN="sosflow-demo-2026" \
 npm run build

@@ -142,8 +142,8 @@ info "Installing npm packages..."
 npm ci --silent
 
 # Build với ALB URL
-info "Building React app với VITE_API_BASE_URL=$ALB_URL..."
-VITE_API_BASE_URL="$ALB_URL" \
+info "Building React app với VITE_API_BASE_URL rỗng (để CloudFront proxy)..."
+VITE_API_BASE_URL="" \
 VITE_DEMO_MODE="true" \
 VITE_DEMO_TOKEN="sosflow-demo-2026" \
 npm run build
