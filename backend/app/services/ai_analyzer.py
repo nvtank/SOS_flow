@@ -49,6 +49,14 @@ def _preserve_explicit_facts(payload: dict[str, Any], message: str) -> None:
         value = location.get(field)
         if isinstance(value, str) and value.strip().casefold() in unknown_values:
             location[field] = None
+    location_evidence = re.search(
+        r"\b(?:ở|tại|đường|phố|xã|phường|quận|huyện|thôn|ấp|cầu|kiệt|hẻm|tổ|số\s+nhà)\b",
+        normalized,
+    )
+    if not location_evidence:
+        # A model occasionally copies the whole SOS sentence into raw_text.
+        # Without any location cue, every location field must remain unknown.
+        location = {field: None for field in ("raw_text", "province", "district", "commune", "village")}
     payload["extracted_location"] = location
 
     location_match = re.search(r"\b(đường\s+[^,.;]+(?:\s*,\s*[^,.;]+)?)", message, flags=re.IGNORECASE)
@@ -78,6 +86,31 @@ def _preserve_explicit_facts(payload: dict[str, Any], message: str) -> None:
     if not re.search(r"bị\s+thương|chấn\s+thương|chảy\s+máu|bất\s+tỉnh|không\s+thở|bi\s+thuong", normalized):
         payload["number_of_injured"] = None
 
+    if payload.get("number_of_people") == 0:
+        payload["number_of_people"] = None
+
+    trapped_evidence = re.search(r"mắc\s+kẹt|không\s+ra\s+được|kẹt\s+trong|mac\s+ket", normalized)
+    risks = list(dict.fromkeys(payload.get("detected_risks", [])))
+    if trapped_evidence:
+        payload["is_trapped"] = True
+        if "trapped" not in risks:
+            risks.append("trapped")
+    else:
+        payload["is_trapped"] = None
+        risks = [item for item in risks if item != "trapped"]
+
+    life_threatening = re.search(
+        r"sắp\s+chết|sap\s+chet|không\s+thở|khong\s+tho|bất\s+tỉnh|bat\s+tinh|"
+        r"không\s+sống\s+qua|khong\s+song\s+qua|không\s+trụ\s+nổi|khong\s+tru\s+noi|"
+        r"không\s+cầm\s+cự|khong\s+cam\s+cu|đang\s+chìm|dang\s+chim|nước\s+cuốn|nuoc\s+cuon",
+        normalized,
+    )
+    if life_threatening:
+        if "life_threatening" not in risks:
+            risks.append("life_threatening")
+        payload["summary"] = "Tin báo có dấu hiệu đe dọa tính mạng; cần xác minh và điều phối ngay."
+    payload["detected_risks"] = risks
+
     explicit_single_elderly = re.search(r"(?:mẹ|má|cha|bố|ba|ông|bà)\s+(?:già|cao\s+tuổi)", normalized)
     explicit_elderly = explicit_single_elderly or re.search(r"người\s+già|cao\s+tuổi|cụ\s+già|lão", normalized)
     if not explicit_elderly:
@@ -97,8 +130,12 @@ def _preserve_explicit_facts(payload: dict[str, Any], message: str) -> None:
     missing = list(dict.fromkeys(payload.get("missing_information", [])))
     if location.get("raw_text"):
         missing = [item for item in missing if item != "exact_location"]
+    elif "exact_location" not in missing:
+        missing.append("exact_location")
     if payload.get("number_of_people") is not None:
         missing = [item for item in missing if item != "number_of_people"]
+    elif "number_of_people" not in missing:
+        missing.append("number_of_people")
     if payload.get("water_level") is None and "high_water" in payload.get("detected_risks", []) and "water_level" not in missing:
         missing.append("water_level")
     payload["missing_information"] = missing
@@ -165,7 +202,7 @@ Yêu cầu bắt buộc:
 - number_of_people là tổng tất cả nạn nhân, bao gồm trẻ em; number_of_children là tập con.
 - Chỉ gắn elderly, disabled_person hoặc pregnant_person khi tin nói rõ. Không suy diễn từ cụm "người nhà".
 - Giữ nguyên chính tả địa danh trong tin báo; nếu có đường/xã/phường/quận thì raw_text phải là đúng cụm địa danh đó. Không đánh dấu exact_location là thiếu khi đã có cụm địa danh cụ thể.
-- detected_risks chỉ dùng các nhãn: trapped, high_water, injury, children, elderly, landslide, disabled_person, pregnant_person. Thêm tất cả nhãn có bằng chứng rõ ràng.
+- detected_risks chỉ dùng các nhãn: life_threatening, trapped, high_water, injury, children, elderly, landslide, disabled_person, pregnant_person. Thêm life_threatening khi có các cụm như "sắp chết", "không thở", "bất tỉnh", "không trụ nổi" hoặc nguy cơ tử vong trực tiếp.
 - missing_information liệt kê các thông tin quan trọng còn thiếu, ví dụ exact_location, number_of_people, contact_method.
 - confidence từ 0 đến 1. Nếu không chắc, dùng null cho trường dữ liệu thay vì suy đoán.
 

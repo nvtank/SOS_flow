@@ -138,6 +138,31 @@ def test_bedrock_uses_explicit_numeric_water_level_from_report():
     assert result.water_level == 1.7
 
 
+def test_bedrock_short_life_threat_message_does_not_invent_location_or_trapped_state():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(
+                summary="Cứu với, có người sắp chết rồi.",
+                extracted_location={"raw_text": "Cứu với, có người sắp chết rồi.", "province": None, "district": None, "commune": None, "village": None},
+                number_of_people=0,
+                is_trapped=True,
+                detected_risks=["trapped"],
+                missing_information=["contact_method"],
+                confidence=0.5,
+            )
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Cứu với, có người sắp chết rồi.")
+
+    assert result.summary.startswith("Tin báo có dấu hiệu đe dọa tính mạng")
+    assert result.extracted_location.raw_text is None
+    assert result.number_of_people is None
+    assert result.is_trapped is None
+    assert "trapped" not in result.detected_risks
+    assert "life_threatening" in result.detected_risks
+    assert {"exact_location", "number_of_people"}.issubset(result.missing_information)
+
+
 @pytest.mark.parametrize("failure", [ValueError("invalid json"), TimeoutError("too slow")])
 def test_bedrock_failures_fall_back_without_losing_analysis(monkeypatch, failure):
     class FailingAnalyzer:
