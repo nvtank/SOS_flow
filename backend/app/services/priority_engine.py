@@ -40,6 +40,11 @@ class PriorityEngine:
         score += severity_score
         reasons.append(severity_reason)
 
+        imminent = self.rules.get("imminent_danger", {})
+        if any(keyword.lower() in message for keyword in imminent.get("keywords", [])):
+            score += imminent.get("score", 0)
+            reasons.append("Người báo cho biết nguy cơ tử vong hoặc không thể cầm cự")
+
         people_score = min(data.number_of_people * self.rules["people"]["per_person"], self.rules["people"]["max_score"])
         score += people_score
         if data.number_of_people:

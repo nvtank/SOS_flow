@@ -26,7 +26,7 @@ SOSFlow giải quyết bài toán bằng một luồng vận hành đơn giản 
 
 1. Người dân gửi yêu cầu cứu hộ qua form web.
 2. Backend kiểm tra dữ liệu và lưu yêu cầu.
-3. Mock AI Analyzer đọc nội dung để phát hiện rủi ro như mắc kẹt, nước cao, có trẻ em, có người bị thương.
+3. Với biểu mẫu có cấu trúc, backend dùng trực tiếp dữ kiện đã nhập; với văn bản tự nhiên, Amazon Bedrock Converse trích xuất JSON có kiểm chứng và fallback an toàn khi nhà cung cấp lỗi.
 4. Rule-based Priority Engine tính điểm ưu tiên dựa trên các yếu tố có thể giải thích.
 5. Command Center Dashboard hiển thị danh sách yêu cầu, bản đồ, điểm ưu tiên, lý do ưu tiên và trạng thái.
 6. Ban Chỉ huy phân công yêu cầu cho đội cứu hộ.
@@ -35,11 +35,11 @@ SOSFlow giải quyết bài toán bằng một luồng vận hành đơn giản 
 
 Giải pháp cụ thể của MVP:
 
-- Reporter Web: form gửi SOS cho người dân, không bắt buộc nhập đủ mọi trường.
+- Reporter Web: hai luồng rõ ràng — biểu mẫu cố định chấm rule-based không gọi AI, hoặc một ô văn bản tự nhiên được Bedrock phân tích.
 - Command Center: dashboard thống kê, bản đồ, bảng yêu cầu, bộ lọc, chi tiết request và thao tác phân công đội.
 - Rescue Team View: màn hình nhiệm vụ cho đội cứu hộ, có thông tin nạn nhân, vị trí, mức ưu tiên và nút cập nhật trạng thái.
 - Priority Engine: công thức rule-based minh bạch, cấu hình trong `config/priority-rules.yaml`.
-- Mock AI Analyzer: interface sẵn để sau này thay bằng Amazon Bedrock hoặc LLM khác.
+- Bedrock Analyzer: provider thật qua Converse API, structured output, metadata chứng minh model/latency/fallback; mock chỉ là fallback hoặc chế độ local không AWS.
 - Seed data: 10 yêu cầu cứu hộ đủ các mức LOW, MEDIUM, HIGH, CRITICAL và 3 đội cứu hộ.
 
 MVP này chứng minh ba điểm chính: dữ liệu SOS có thể được gom vào một hàng đợi thống nhất, quyết định ưu tiên có thể giải thích được, và tiến độ cứu hộ có thể được cập nhật theo một vòng đời rõ ràng thay vì theo dõi rời rạc qua tin nhắn.
@@ -79,7 +79,8 @@ flowchart TB
 
     API[FastAPI Backend]
     Priority[Priority Engine]
-    AI[Mock AI Analyzer]
+    AI[Amazon Bedrock Analyzer]
+    Rules[Structured rule-only intake]
     DB[(PostgreSQL)]
     Cache[(Redis)]
     Map[OpenStreetMap]
@@ -90,6 +91,7 @@ flowchart TB
 
     API --> Priority
     API --> AI
+    API --> Rules
     API --> DB
     API --> Cache
 
@@ -97,7 +99,7 @@ flowchart TB
     Rescue --> Map
 ```
 
-Backend là modular monolith để hackathon chạy nhanh và dễ hiểu. Priority Engine và AI Analyzer đã tách module để có thể thay bằng Bedrock hoặc LLM sau này.
+Backend là modular monolith để hackathon chạy nhanh và dễ hiểu. Priority Engine vẫn là nguồn điểm chính thức; Bedrock chỉ trích xuất/gợi ý dữ kiện từ lời cầu cứu tự nhiên và không tự giao đội.
 
 ## Cơ chế ưu tiên
 
@@ -210,7 +212,11 @@ Dashboard tổng hợp bằng database aggregation: phân bố priority/status/s
 
 ### Bedrock analyzer và gợi ý đội
 
-Mặc định `AI_PROVIDER=mock`, nên demo không cần AWS. Đặt `AI_PROVIDER=bedrock` cùng model ID hoặc inference profile/custom model ARN để dùng Amazon Bedrock Converse API qua default credential chain của boto3. Reporter có thể chỉ gửi một đoạn mô tả; với suggestion có confidence từ 0,65 trở lên, backend tự điền các trường chưa được người báo cung cấp (số người, trẻ em, người bị thương, mắc kẹt, mực nước và địa chỉ trích xuất) trước khi tính priority. Dữ liệu reporter/điều phối nhập trực tiếp luôn được ưu tiên và re-analysis chỉ cập nhật suggestion. Timeout, throttling, quyền model hoặc structured output không hợp lệ sẽ lưu mã lỗi an toàn và fallback sang mock khi `AI_FALLBACK_ENABLED=true`, không làm mất report. AI không tự giao đội hoặc phát lệnh cứu hộ. Có thể đánh giá dataset tổng hợp 40 mẫu bằng `python3 scripts/evaluate_analyzer.py --provider mock`; xem [hướng dẫn customization](docs/12-bedrock-customization.md) trước khi tạo bất kỳ job có chi phí nào.
+`/report` có hai chế độ. `STRUCTURED` nhận họ tên, số người lớn/trẻ em và độ sâu; backend tự tính tổng người, ghi `provider=rule_based`, `ai_invoked=false` rồi chạy Priority Engine. `NATURAL_LANGUAGE` chỉ nhận một đoạn cầu cứu và gọi Amazon Bedrock Converse; với suggestion có confidence từ 0,65 trở lên, backend tự điền các trường còn thiếu trước khi tính priority. Metadata lưu `requested_provider`, provider thực tế, model, latency, `bedrock_succeeded`, fallback và danh sách trường đã áp dụng để chứng minh trực tiếp trên web.
+
+Mặc định `AI_PROVIDER=mock`, nên local vẫn chạy không cần AWS. Đặt `AI_PROVIDER=bedrock` cùng model ID hoặc inference profile/custom model ARN để dùng Bedrock qua default credential chain của boto3. Timeout, throttling, quyền model hoặc structured output không hợp lệ lưu mã lỗi an toàn và fallback sang mock khi `AI_FALLBACK_ENABLED=true`, không làm mất report. Dữ liệu reporter/điều phối nhập trực tiếp luôn được ưu tiên; re-analysis không ghi đè dữ liệu đã xác minh. AI không tự giao đội hoặc phát lệnh cứu hộ.
+
+Trong phạm vi demo Trà Linh/Đà Nẵng, địa danh đã biết được đối chiếu qua gazetteer cố định để tạo tọa độ tham chiếu và tính Haversine tới đội cứu hộ. Metadata ghi rõ `provider=demo_gazetteer` và `is_production_geocoder=false`; đây không phải geocoder production và không tuyên bố là vị trí GPS chính xác của nạn nhân.
 
 Để chứng minh một invocation Bedrock thật (không chấp nhận mock/fallback), cấu hình `AI_PROVIDER=bedrock` và inference profile/model hợp lệ, sau đó chạy:
 
@@ -221,6 +227,8 @@ DEMO_TOKEN=sosflow-demo docker compose -p sosflowlocaldemo -f docker-compose.loc
 Lệnh chỉ in metadata an toàn. Kết quả phải có `"bedrock_verified": true`, `"provider": "bedrock"` và `"fallback_used": false`. Request Detail cũng hiển thị provider, confidence, latency và fallback để trình bày trực tiếp trên Dashboard.
 
 Request Detail hiển thị tối đa ba đội `AVAILABLE` được chấm điểm minh bạch theo khoảng cách Haversine (đường thẳng, không phải ETA), năng lực, thiết bị, sức chứa và active mission. Điều phối viên vẫn phải bấm assign. Mission hỗ trợ `BLOCKED` và `NEED_REINFORCEMENT`; từng bước (assigned, departed, route blocked, reinforcement, completed/failed...) có MissionEvent với actor, ghi chú, thời điểm và tọa độ tùy chọn.
+
+Xem [kịch bản demo hai luồng AI](docs/15-dual-intake-bedrock-demo.md) để kiểm tra Bedrock thật, rule-only, geocoding demo và vòng đời giao đội.
 
 ### PWA offline-first và vùng im lặng
 

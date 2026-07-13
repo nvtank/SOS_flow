@@ -51,6 +51,11 @@ class IntakeSource(str, Enum):
     OFFLINE_SYNC = "OFFLINE_SYNC"
 
 
+class IntakeMode(str, Enum):
+    STRUCTURED = "STRUCTURED"
+    NATURAL_LANGUAGE = "NATURAL_LANGUAGE"
+
+
 class DuplicateState(str, Enum):
     NOT_DUPLICATE = "NOT_DUPLICATE"
     POSSIBLE_DUPLICATE = "POSSIBLE_DUPLICATE"
@@ -91,6 +96,7 @@ class RescueRequest(Base):
     reporter_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
     message: Mapped[str] = mapped_column(Text)
+    intake_mode: Mapped[str] = mapped_column(String(32), default=IntakeMode.NATURAL_LANGUAGE.value, index=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -50,6 +50,7 @@ export type RescueRequest = {
   reporter_name?: string;
   phone_number?: string;
   message: string;
+  intake_mode: "STRUCTURED" | "NATURAL_LANGUAGE";
   address?: string;
   latitude?: number;
   longitude?: number;
@@ -69,7 +70,7 @@ export type RescueRequest = {
   is_simulated: boolean;
   raw_payload?: Record<string, unknown>;
   ai_analysis: { summary?: string; detected_risks?: string[]; missing_information?: string[]; confidence?: number };
-  ai_metadata: { provider?: string; model_id?: string; latency_ms?: number; analyzed_at?: string; fallback_used?: boolean; error_code?: string };
+  ai_metadata: { provider?: string; requested_provider?: string; model_id?: string; latency_ms?: number; analyzed_at?: string; ai_invoked?: boolean; bedrock_succeeded?: boolean; fallback_used?: boolean; error_code?: string; intake_mode?: string; auto_applied_fields?: string[] };
   ai_fallback_used: boolean;
   priority_score: number;
   priority_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";

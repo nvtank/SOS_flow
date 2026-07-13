@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import get_settings
 from app.core.time import as_utc, utc_now
-from app.models.entities import MissionEvent, MissionStatus, RequestStatus, RescueMission, RescueRequest, RescueTeam, StatusHistory, TeamStatus
+from app.models.entities import IntakeMode, MissionEvent, MissionStatus, RequestStatus, RescueMission, RescueRequest, RescueTeam, StatusHistory, TeamStatus
 from app.schemas.rescue import RescueRequestCreate, RescueRequestUpdate
 from app.services.ai_analyzer import analyze_with_fallback
+from app.services.geocoding_service import suggest_demo_coordinates
 from app.services.priority_engine import PriorityEngine, PriorityInput
 
 
@@ -173,6 +174,90 @@ def _apply_ai_autofill(request: RescueRequest, payload: RescueRequestCreate) -> 
     return applied
 
 
+def _structured_analysis(payload: RescueRequestCreate | RescueRequest) -> tuple[dict, dict]:
+    """Describe explicit form data without invoking any AI provider."""
+    risks: list[str] = []
+    needs = ["rescue"]
+    if payload.is_trapped:
+        risks.append("trapped")
+    if payload.water_level is not None and payload.water_level >= 1.5:
+        risks.append("high_water")
+    if payload.number_of_children:
+        risks.append("children")
+    if payload.number_of_elderly:
+        risks.append("elderly")
+    if payload.number_of_injured:
+        risks.append("injury")
+        needs.append("medical_support")
+    if payload.has_disabled_person:
+        risks.append("disabled_person")
+    if payload.has_pregnant_person:
+        risks.append("pregnant_person")
+
+    missing = [] if payload.address else ["exact_location"]
+    if payload.water_level is None:
+        missing.append("water_level")
+    water_text = f"{payload.water_level:g} mét" if payload.water_level is not None else "chưa xác định"
+    summary = (
+        f"Biểu mẫu xác nhận {payload.number_of_people} người cần hỗ trợ, "
+        f"gồm {payload.number_of_children} trẻ em; mực nước {water_text}."
+    )
+    analysis = {
+        "summary": summary,
+        "normalized_message": payload.message,
+        "extracted_location": {
+            "raw_text": payload.address,
+            "province": None,
+            "district": None,
+            "commune": None,
+            "village": None,
+        },
+        "number_of_people": payload.number_of_people,
+        "number_of_children": payload.number_of_children,
+        "number_of_elderly": payload.number_of_elderly,
+        "number_of_injured": payload.number_of_injured,
+        "is_trapped": payload.is_trapped,
+        "water_level": payload.water_level,
+        "needs": needs,
+        "detected_risks": risks,
+        "missing_information": missing,
+        "confidence": 1.0,
+        "explanation": "Dữ liệu do người báo nhập trực tiếp; Amazon Bedrock không được gọi cho luồng biểu mẫu.",
+    }
+    metadata = {
+        "provider": "rule_based",
+        "requested_provider": "none",
+        "model_id": "priority-engine-v1",
+        "latency_ms": 0.0,
+        "analyzed_at": utc_now().isoformat(),
+        "confidence": 1.0,
+        "ai_invoked": False,
+        "bedrock_succeeded": False,
+        "fallback_used": False,
+        "error_code": None,
+        "auto_applied_fields": [],
+    }
+    return analysis, metadata
+
+
+def _apply_demo_geocoding(request: RescueRequest, auto_applied_fields: list[str]) -> None:
+    if request.latitude is not None or request.longitude is not None:
+        return
+    suggestion = suggest_demo_coordinates(request.address)
+    if not suggestion:
+        return
+    request.latitude = suggestion.latitude
+    request.longitude = suggestion.longitude
+    auto_applied_fields.extend(["latitude", "longitude"])
+    request.ai_metadata["geocoding"] = {
+        "provider": "demo_gazetteer",
+        "area_code": suggestion.area_code,
+        "reference": suggestion.reference,
+        "confidence": suggestion.confidence,
+        "is_production_geocoder": False,
+    }
+
+
 def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRequest:
     """Create with a temporary UUID, then derive the human code from DB identity.
 
@@ -188,7 +273,7 @@ def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRe
             request_code=f"PENDING-{uniqueness_token}",
             **payload.model_dump(
                 mode="json",
-                exclude={"note", "received_at", "external_reference", "client_submission_id", "is_simulated", "raw_payload"},
+                exclude={"note", "received_at", "external_reference", "client_submission_id", "is_simulated", "raw_payload", "number_of_adults"},
             ),
             external_reference=payload.external_reference,
             client_submission_id=payload.client_submission_id,
@@ -200,10 +285,17 @@ def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRe
             updated_at=now,
             priority_calculated_at=now,
         )
-        request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
-        request.ai_fallback_used = bool(request.ai_metadata["fallback_used"])
-        auto_applied_fields = _apply_ai_autofill(request, payload)
+        if payload.intake_mode == IntakeMode.STRUCTURED:
+            request.ai_analysis, request.ai_metadata = _structured_analysis(payload)
+            auto_applied_fields: list[str] = []
+        else:
+            request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
+            auto_applied_fields = _apply_ai_autofill(request, payload)
+            request.ai_metadata["auto_applied_fields"] = auto_applied_fields
+        request.ai_metadata["intake_mode"] = payload.intake_mode.value
+        _apply_demo_geocoding(request, auto_applied_fields)
         request.ai_metadata["auto_applied_fields"] = auto_applied_fields
+        request.ai_fallback_used = bool(request.ai_metadata["fallback_used"])
         _apply_priority(request, now)
         db.add(request)
         try:
@@ -244,7 +336,11 @@ def update_rescue_request(db: Session, request_id: int, payload: RescueRequestUp
 
     if changed_priority_inputs:
         now = utc_now()
-        request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
+        if request.intake_mode == IntakeMode.STRUCTURED.value:
+            request.ai_analysis, request.ai_metadata = _structured_analysis(request)
+        else:
+            request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
+        request.ai_metadata["intake_mode"] = request.intake_mode
         request.ai_fallback_used = bool(request.ai_metadata["fallback_used"])
         _apply_priority(request, now)
         _record_history(
@@ -265,9 +361,15 @@ def reanalyze_request(db: Session, request_id: int, changed_by: str = "admin") -
     request = db.get(RescueRequest, request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Rescue request not found")
-    request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
+    if request.intake_mode == IntakeMode.STRUCTURED.value:
+        request.ai_analysis, request.ai_metadata = _structured_analysis(request)
+        audit_note = "Rule-based analysis recalculated; Bedrock was not invoked for structured intake"
+    else:
+        request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
+        audit_note = "AI analysis re-run; suggestions kept separate from reporter data"
+    request.ai_metadata["intake_mode"] = request.intake_mode
     request.ai_fallback_used = bool(request.ai_metadata["fallback_used"])
-    _record_history(db, request, request.status, request.status, changed_by, "AI analysis re-run; suggestions kept separate from reporter data")
+    _record_history(db, request, request.status, request.status, changed_by, audit_note)
     _commit(db)
     db.refresh(request)
     return request

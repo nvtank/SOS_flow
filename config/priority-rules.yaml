@@ -8,6 +8,11 @@ severity_keywords:
       - "nước cuốn"
       - "bat tinh"
       - "bất tỉnh"
+      - "không sống qua"
+      - "không trụ nổi"
+      - "không cầm cự"
+      - "khong song qua"
+      - "khong tru noi"
   trapped:
     score: 20
     keywords:
@@ -24,6 +29,16 @@ severity_keywords:
       - "nuoc len"
       - "ngap noc"
 default_severity_score: 5
+imminent_danger:
+  score: 20
+  keywords:
+    - "không sống qua"
+    - "không trụ nổi"
+    - "sắp không trụ"
+    - "không cầm cự"
+    - "không thể cầm cự"
+    - "khong song qua"
+    - "khong tru noi"
 people:
   per_person: 2
   max_score: 20

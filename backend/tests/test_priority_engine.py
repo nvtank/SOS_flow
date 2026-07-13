@@ -30,3 +30,18 @@ def test_priority_engine_keeps_safe_low_water_case_low():
 
     assert result["priority_level"] == "LOW"
     assert result["priority_score"] < 30
+
+
+def test_priority_engine_escalates_imminent_survival_language():
+    engine = PriorityEngine(RULES_PATH)
+    result = engine.calculate(
+        PriorityInput(
+            message="Tôi không trụ nổi, dự kiến không sống qua 9 giờ vì nước dâng quá cao.",
+            number_of_people=2,
+            number_of_elderly=1,
+            is_trapped=True,
+        )
+    )
+
+    assert result["priority_level"] == "CRITICAL"
+    assert any("không thể cầm cự" in reason for reason in result["reasons"])

@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from app.core.time import as_utc
-from app.models.entities import IntakeSource
+from app.models.entities import IntakeMode, IntakeSource
 
 
 class UTCResponseModel(BaseModel):
@@ -24,7 +24,9 @@ class UTCResponseModel(BaseModel):
 class RescueRequestCreate(BaseModel):
     reporter_name: str | None = None
     phone_number: str | None = None
-    message: str = Field(..., min_length=5)
+    message: str | None = None
+    intake_mode: IntakeMode = IntakeMode.NATURAL_LANGUAGE
+    number_of_adults: int | None = Field(default=None, ge=0)
     address: str | None = None
     latitude: float | None = None
     longitude: float | None = None
@@ -43,6 +45,44 @@ class RescueRequestCreate(BaseModel):
     is_simulated: bool = False
     raw_payload: dict[str, Any] | None = None
     note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_intake_mode(self):
+        if self.intake_mode == IntakeMode.NATURAL_LANGUAGE:
+            self.message = (self.message or "").strip()
+            if len(self.message) < 5:
+                raise ValueError("Natural-language reports require a message of at least 5 characters")
+            return self
+
+        if not (self.reporter_name or "").strip():
+            raise ValueError("Structured reports require reporter_name")
+        if self.number_of_adults is None:
+            raise ValueError("Structured reports require number_of_adults")
+        if self.water_level is None:
+            raise ValueError("Structured reports require water_level")
+
+        self.reporter_name = self.reporter_name.strip()
+        self.number_of_people = self.number_of_adults + self.number_of_children
+        facts = [
+            f"{self.reporter_name}",
+            f"{self.number_of_adults} người lớn",
+            f"{self.number_of_children} trẻ em",
+            f"mực nước {self.water_level:g} mét",
+        ]
+        if self.number_of_elderly:
+            facts.append(f"{self.number_of_elderly} người cao tuổi")
+        if self.number_of_injured:
+            facts.append(f"{self.number_of_injured} người bị thương")
+        if self.is_trapped:
+            facts.append("đang mắc kẹt")
+        if self.has_disabled_person:
+            facts.append("có người khuyết tật")
+        if self.has_pregnant_person:
+            facts.append("có phụ nữ mang thai")
+        if self.address:
+            facts.append(f"tại {self.address.strip()}")
+        self.message = " - ".join(facts)
+        return self
 
     @field_validator("received_at")
     @classmethod
@@ -92,6 +132,7 @@ class RescueRequestOut(UTCResponseModel):
     reporter_name: str | None
     phone_number: str | None
     message: str
+    intake_mode: str
     address: str | None
     latitude: float | None
     longitude: float | None

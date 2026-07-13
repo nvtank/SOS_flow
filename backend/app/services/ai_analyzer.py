@@ -43,18 +43,69 @@ EMERGENCY_ANALYSIS_SCHEMA = EmergencyAnalysis.model_json_schema()
 def _preserve_explicit_facts(payload: dict[str, Any], message: str) -> None:
     """Prevent a model from changing plainly stated location/risk facts."""
     normalized = message.casefold()
+    location = dict(payload.get("extracted_location") or {})
+    unknown_values = {"", "không rõ", "khong ro", "unknown", "n/a", "none", "null"}
+    for field in ("raw_text", "province", "district", "commune", "village"):
+        value = location.get(field)
+        if isinstance(value, str) and value.strip().casefold() in unknown_values:
+            location[field] = None
+    payload["extracted_location"] = location
+
     location_match = re.search(r"\b(đường\s+[^,.;]+(?:\s*,\s*[^,.;]+)?)", message, flags=re.IGNORECASE)
     if location_match:
-        location = dict(payload.get("extracted_location") or {})
-        location["raw_text"] = location_match.group(1).strip()
+        explicit_location = re.split(
+            r"\s+(?:cùng|với|đang|hiện|gồm|có\s+\d+|nước\s+đang)\b",
+            location_match.group(1),
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" ,")
+        location["raw_text"] = explicit_location
         if re.search(r"ngũ\s+hành\s+sơn", normalized):
             location["district"] = "Ngũ Hành Sơn"
         payload["extracted_location"] = location
-        payload["missing_information"] = [item for item in payload.get("missing_information", []) if item != "exact_location"]
 
-    if not re.search(r"người\s+già|cao\s+tuổi|cụ\s+già|lão", normalized):
+    water_match = re.search(r"(\d+(?:[.,]\d+)?)\s*(mét|met|m|cm)\b", normalized)
+    if water_match:
+        explicit_water = float(water_match.group(1).replace(",", "."))
+        if water_match.group(2) == "cm":
+            explicit_water /= 100
+        payload["water_level"] = explicit_water
+    else:
+        payload["water_level"] = None
+
+    if not re.search(r"trẻ\s+em|trẻ\s+nhỏ|em\s+bé|con\s+nhỏ|tre\s+em", normalized):
+        payload["number_of_children"] = None
+    if not re.search(r"bị\s+thương|chấn\s+thương|chảy\s+máu|bất\s+tỉnh|không\s+thở|bi\s+thuong", normalized):
+        payload["number_of_injured"] = None
+
+    explicit_single_elderly = re.search(r"(?:mẹ|má|cha|bố|ba|ông|bà)\s+(?:già|cao\s+tuổi)", normalized)
+    explicit_elderly = explicit_single_elderly or re.search(r"người\s+già|cao\s+tuổi|cụ\s+già|lão", normalized)
+    if not explicit_elderly:
         payload["number_of_elderly"] = None
         payload["detected_risks"] = [item for item in payload.get("detected_risks", []) if item != "elderly"]
+    elif explicit_single_elderly:
+        payload["number_of_elderly"] = 1
+        if "elderly" not in payload.get("detected_risks", []):
+            payload.setdefault("detected_risks", []).append("elderly")
+        together_with_reporter = re.search(
+            r"\b(?:tôi|mình)\b.*\b(?:cùng|với|có|đang\s+có)\s+(?:mẹ|má|cha|bố|ba|ông|bà)\s+(?:già|cao\s+tuổi)",
+            normalized,
+        )
+        if together_with_reporter:
+            payload["number_of_people"] = max(2, int(payload.get("number_of_people") or 0))
+
+    missing = list(dict.fromkeys(payload.get("missing_information", [])))
+    if location.get("raw_text"):
+        missing = [item for item in missing if item != "exact_location"]
+    if payload.get("number_of_people") is not None:
+        missing = [item for item in missing if item != "number_of_people"]
+    if payload.get("water_level") is None and "high_water" in payload.get("detected_risks", []) and "water_level" not in missing:
+        missing.append("water_level")
+    payload["missing_information"] = missing
+
+    if not payload.get("needs"):
+        risks = set(payload.get("detected_risks", []))
+        payload["needs"] = ["medical_support"] if "injury" in risks else ["rescue"] if risks.intersection({"trapped", "high_water"}) else ["assessment"]
 
 
 class EmergencyAnalyzer(ABC):
@@ -169,10 +220,22 @@ def get_emergency_analyzer(settings: Settings | None = None) -> EmergencyAnalyze
 
 def analyze_with_fallback(message: str, settings: Settings | None = None) -> tuple[dict, dict]:
     settings = settings or get_settings(); started = time.perf_counter(); fallback = False; error_code = None
+    requested_provider = settings.ai_provider.lower()
     try:
         analyzer = get_emergency_analyzer(settings); analysis = analyzer.analyze(message)
     except (Exception, ValidationError) as error:
         if not settings.ai_fallback_enabled: raise
         analyzer = MockEmergencyAnalyzer(); analysis = analyzer.analyze(message); fallback = True; error_code = _safe_error_code(error)
-    metadata = {"provider": analyzer.provider_name, "model_id": (getattr(analyzer, "model_id", None) or "mock")[-80:], "latency_ms": round((time.perf_counter() - started) * 1000, 1), "analyzed_at": utc_now().isoformat(), "confidence": analysis.confidence, "fallback_used": fallback, "error_code": error_code}
+    metadata = {
+        "provider": analyzer.provider_name,
+        "requested_provider": requested_provider,
+        "model_id": (getattr(analyzer, "model_id", None) or "mock")[-80:],
+        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+        "analyzed_at": utc_now().isoformat(),
+        "confidence": analysis.confidence,
+        "ai_invoked": requested_provider == "bedrock",
+        "bedrock_succeeded": analyzer.provider_name == "bedrock" and not fallback,
+        "fallback_used": fallback,
+        "error_code": error_code,
+    }
     return analysis.model_dump(mode="json"), metadata

@@ -86,6 +86,58 @@ def test_bedrock_preserves_explicit_street_and_does_not_invent_elderly():
     assert "exact_location" not in result.missing_information
 
 
+def test_bedrock_preserves_explicit_elderly_family_member():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(number_of_people=2, number_of_elderly=None, detected_risks=["trapped", "high_water"])
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Tôi đang ở Trà Linh với mẹ già, nước dâng quá cao")
+
+    assert result.number_of_elderly == 1
+    assert result.number_of_people == 2
+    assert "elderly" in result.detected_risks
+
+
+def test_bedrock_rejects_invented_zero_water_and_unknown_location_strings():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(
+                extracted_location={"raw_text": "Trà Linh", "province": "Không rõ", "district": "unknown", "commune": None, "village": "Trà Linh"},
+                number_of_people=2,
+                number_of_children=0,
+                number_of_injured=0,
+                water_level=0.0,
+                needs=[],
+                detected_risks=["trapped", "high_water", "elderly"],
+                missing_information=["exact_location", "number_of_people"],
+            )
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Tôi ở Trà Linh với mẹ già, nước dâng quá cao")
+
+    assert result.water_level is None
+    assert result.number_of_children is None
+    assert result.number_of_injured is None
+    assert result.extracted_location.province is None
+    assert result.extracted_location.district is None
+    assert "exact_location" not in result.missing_information
+    assert "number_of_people" not in result.missing_information
+    assert "water_level" in result.missing_information
+    assert result.needs == ["rescue"]
+
+
+def test_bedrock_uses_explicit_numeric_water_level_from_report():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(water_level=0.0)
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Có 3 người mắc kẹt, nước sâu 1,7 mét")
+
+    assert result.water_level == 1.7
+
+
 @pytest.mark.parametrize("failure", [ValueError("invalid json"), TimeoutError("too slow")])
 def test_bedrock_failures_fall_back_without_losing_analysis(monkeypatch, failure):
     class FailingAnalyzer:
@@ -125,6 +177,82 @@ def test_text_only_report_uses_high_confidence_ai_suggestions_for_priority(db, m
     assert request.water_level == 2.1
     assert set(request.ai_metadata["auto_applied_fields"]) >= {"number_of_people", "number_of_children", "number_of_injured", "is_trapped", "water_level"}
     assert request.priority_level in {"HIGH", "CRITICAL"}
+
+
+def test_structured_report_uses_rules_without_invoking_ai(db, monkeypatch):
+    def fail_if_ai_is_called(*_args, **_kwargs):
+        raise AssertionError("Structured intake must not invoke an AI analyzer")
+
+    monkeypatch.setattr(rescue_service, "analyze_with_fallback", fail_if_ai_is_called)
+    request = rescue_service.create_rescue_request(
+        db,
+        RescueRequestCreate(
+            intake_mode="STRUCTURED",
+            reporter_name="Nguyễn Văn A",
+            number_of_adults=2,
+            number_of_children=3,
+            number_of_elderly=1,
+            number_of_injured=1,
+            water_level=2.2,
+            is_trapped=True,
+            address="Trà Linh, Đà Nẵng",
+        ),
+    )
+
+    assert request.intake_mode == "STRUCTURED"
+    assert request.number_of_people == 5
+    assert request.number_of_children == 3
+    assert request.ai_metadata["provider"] == "rule_based"
+    assert request.ai_metadata["ai_invoked"] is False
+    assert request.ai_metadata["bedrock_succeeded"] is False
+    assert request.ai_fallback_used is False
+    assert request.priority_level in {"HIGH", "CRITICAL"}
+    assert request.latitude == pytest.approx(15.023565)
+    assert request.longitude == pytest.approx(108.041263)
+    assert request.ai_metadata["geocoding"]["provider"] == "demo_gazetteer"
+    assert "2 người lớn" in request.message
+    assert "3 trẻ em" in request.message
+
+
+def test_natural_language_report_records_successful_bedrock_evidence(db, monkeypatch):
+    analysis = tool_response()["output"]["message"]["content"][0]["toolUse"]["input"]
+    metadata = {
+        "provider": "bedrock",
+        "requested_provider": "bedrock",
+        "model_id": "apac.amazon.nova-lite-v1:0",
+        "latency_ms": 420.5,
+        "analyzed_at": "2026-07-14T00:00:00+00:00",
+        "confidence": 0.88,
+        "ai_invoked": True,
+        "bedrock_succeeded": True,
+        "fallback_used": False,
+        "error_code": None,
+    }
+    monkeypatch.setattr(rescue_service, "analyze_with_fallback", lambda _: (analysis, metadata.copy()))
+
+    request = rescue_service.create_rescue_request(
+        db,
+        RescueRequestCreate(
+            intake_mode="NATURAL_LANGUAGE",
+            message="Cứu tôi, mẹ già đang mắc kẹt và nước dâng quá cao tại Trà Linh.",
+        ),
+    )
+
+    assert request.intake_mode == "NATURAL_LANGUAGE"
+    assert request.ai_metadata["provider"] == "bedrock"
+    assert request.ai_metadata["bedrock_succeeded"] is True
+    assert request.ai_metadata["fallback_used"] is False
+    assert request.ai_metadata["intake_mode"] == "NATURAL_LANGUAGE"
+    assert request.number_of_people == 3
+
+
+def test_dual_intake_schema_rejects_incomplete_inputs():
+    with pytest.raises(ValueError, match="message of at least 5 characters"):
+        RescueRequestCreate(intake_mode="NATURAL_LANGUAGE", message="SOS")
+    with pytest.raises(ValueError, match="number_of_adults"):
+        RescueRequestCreate(intake_mode="STRUCTURED", reporter_name="Nguyễn Văn A", water_level=1.2)
+    with pytest.raises(ValueError, match="water_level"):
+        RescueRequestCreate(intake_mode="STRUCTURED", reporter_name="Nguyễn Văn A", number_of_adults=2)
 
 
 def test_recommendation_prefers_capable_nearby_available_team_without_assigning(db):
