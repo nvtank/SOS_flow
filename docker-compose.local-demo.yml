@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sosflow
+      POSTGRES_PASSWORD: sosflow
+      POSTGRES_DB: sosflow
+    volumes:
+      - sosflow_demo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sosflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg2://sosflow:sosflow@postgres:5432/sosflow
+      CORS_ORIGINS: http://localhost:5174
+      PRIORITY_RULES_PATH: /config/priority-rules.yaml
+      SEED_ON_STARTUP: "true"
+      DEMO_MODE: "true"
+      DEMO_TOKEN: ${DEMO_TOKEN:-sosflow-demo}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AWS_REGION: ${AWS_REGION:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      BEDROCK_INFERENCE_PROFILE_ARN: ${BEDROCK_INFERENCE_PROFILE_ARN:-}
+      BEDROCK_CUSTOM_MODEL_ARN: ${BEDROCK_CUSTOM_MODEL_ARN:-}
+      AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-true}
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8001
+      VITE_DEMO_MODE: "true"
+      VITE_DEMO_TOKEN: ${DEMO_TOKEN:-sosflow-demo}
+    ports:
+      - "5174:5173"
+    depends_on:
+      - backend
+
+volumes:
+  sosflow_demo_postgres_data:

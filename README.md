@@ -153,6 +153,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Nếu máy đã dùng các cổng PostgreSQL/Redis mặc định, chạy demo song song mà không chiếm `5432/6379`:
+
+```bash
+DEMO_TOKEN=sosflow-demo docker compose -f docker-compose.local-demo.yml up --build
+```
+
+Khi đó mở frontend tại `http://localhost:5174`, backend tại `http://localhost:8001`, rồi vào Dashboard và bấm **Start x1** trong Demo control.
+
 Địa chỉ:
 
 - Frontend: http://localhost:5173
@@ -166,16 +174,74 @@ cd backend
 PYTHONPATH=. pytest
 ```
 
+Trước khi chạy backend trên database hiện có, áp dụng migration một lần:
+
+```bash
+cd backend
+PYTHONPATH=. alembic upgrade head
+```
+
+### Quyết định aging
+
+Backend lưu tất cả timestamp ở UTC và API tuần tự hóa chúng theo ISO 8601 có hậu tố `Z`; frontend dùng `Date`/`toLocaleString` để hiển thị múi giờ thiết bị. Aging được tính bằng tham số `now` của Priority Engine. Khi tải danh sách, chi tiết hoặc statistics, backend chỉ refresh các request chưa kết thúc có `priority_calculated_at` cũ hơn 5 phút. Vì vậy điểm chờ tăng theo thời gian nhưng GET không ghi database liên tục. Test có thể truyền thời gian giả lập trực tiếp vào engine.
+
+### Vòng đời và tính toàn vẹn
+
+Request code có dạng `SOS-YYYYMMDD-000123-<token>`: phần ID hỗ trợ đọc và sắp xếp, token UUID ngắn loại trừ va chạm ngay cả với SQLite cũ có thể tái sử dụng ID sau khi xóa. Request chỉ chuyển theo ma trận `PENDING_VERIFICATION → VERIFIED → ASSIGNED → ACCEPTED → MOVING → ARRIVED → RESCUING → COMPLETED|FAILED`. Xác minh dùng API cập nhật request; assignment và các trạng thái sau đó chỉ đi qua transaction service tương ứng. Mỗi bước tạo `StatusHistory`; các lần tính lại priority cũng được ghi audit với trạng thái giữ nguyên. Database có partial unique index để một request và một team chỉ có tối đa một mission đang hoạt động.
+
+### Multi-source simulator và báo cáo trùng
+
+`WEB`, `CALL_112`, `PHONE`, `SMS`, `ZALO`, `SOCIAL_MEDIA`, `LOCAL_OFFICER` và `OFFLINE_SYNC` đều đi qua một intake service. Đây là **simulator**: SOSFlow không kết nối SMS gateway, Zalo API, tổng đài 112 hoặc What3words API thật trong MVP này.
+
+Idempotency dùng `client_submission_id` hoặc cặp `source` + `external_reference`; retry trả về report cũ. Sau khi nhận tin, engine tạo đề xuất `POSSIBLE_DUPLICATE` có điểm/lý do giải thích từ vị trí, thời điểm, địa chỉ, điện thoại, nội dung chuẩn hóa và tín hiệu rule-AI. Không có auto-merge: admin phải xác nhận rồi mới gộp report vào canonical incident; report gốc và audit history luôn được giữ lại.
+
+Để chạy cảnh demo nhiều nguồn:
+
+```bash
+DEMO_MODE=true DEMO_TOKEN=sosflow-demo docker compose up --build
+python3 scripts/simulate_disaster.py --token sosflow-demo
+```
+
+Script bơm 12 report qua API thật, trong đó có 112/SMS/cán bộ/offline sync và ba report cùng khu vực cầu Trà Linh. Demo endpoint chỉ được mount khi `DEMO_MODE=true` và cần header `X-Demo-Token`. Điểm `///slipped.awkward.scarecrow` được giữ như một liên kết What3words trong report demo để mở trực tiếp từ popup; không tự suy diễn tọa độ khi chưa có API key What3words.
+
+### Command Center Dashboard
+
+Dashboard tổng hợp bằng database aggregation: phân bố priority/status/source, chuỗi tin báo 24 giờ (và theo phút khi demo), thời gian chờ/giao đội/đến hiện trường/hoàn tất trung bình, đội khả dụng và cảnh báo vận hành. Trong `DEMO_MODE=true`, Dashboard polling mỗi 5 giây và tự dừng khi rời trang; ngoài demo chỉ làm mới thủ công. Bản đồ fit theo các marker hiện có, giảm độ nổi bật report đã đóng, không lỗi khi thiếu tọa độ và cho phép click mở Request Detail.
+
+### Bedrock analyzer và gợi ý đội
+
+Mặc định `AI_PROVIDER=mock`, nên demo không cần AWS. Đặt `AI_PROVIDER=bedrock` cùng model ID hoặc inference profile/custom model ARN để dùng Amazon Bedrock Converse API qua default credential chain của boto3. Output được kiểm tra theo JSON schema/Pydantic; timeout, throttling, quyền model hoặc structured output không hợp lệ sẽ lưu mã lỗi an toàn và fallback sang mock khi `AI_FALLBACK_ENABLED=true`, không làm mất report. AI chỉ lưu suggestion/metadata riêng, không ghi đè dữ liệu người báo đã nhập, không tự giao đội hoặc phát lệnh cứu hộ. Có thể đánh giá dataset tổng hợp 40 mẫu bằng `python3 scripts/evaluate_analyzer.py --provider mock`; xem [hướng dẫn customization](docs/12-bedrock-customization.md) trước khi tạo bất kỳ job có chi phí nào.
+
+Request Detail hiển thị tối đa ba đội `AVAILABLE` được chấm điểm minh bạch theo khoảng cách Haversine (đường thẳng, không phải ETA), năng lực, thiết bị, sức chứa và active mission. Điều phối viên vẫn phải bấm assign. Mission hỗ trợ `BLOCKED` và `NEED_REINFORCEMENT`; từng bước (assigned, departed, route blocked, reinforcement, completed/failed...) có MissionEvent với actor, ghi chú, thời điểm và tọa độ tùy chọn.
+
+### PWA offline-first và vùng im lặng
+
+Reporter là PWA có manifest, service worker, offline shell và icon placeholder. Service worker chỉ cache application shell/static asset; **không cache API**, vì response quản trị có thể nhạy cảm. Khi mất mạng, form SOS được lưu ở IndexedDB với mã `LOCAL-...`, `client_submission_id`, payload, retry/error state; reload không làm mất queue. Khi có mạng, listener online hoặc nút **Đồng bộ ngay** gửi lại qua pipeline chuẩn với `source=OFFLINE_SYNC`, giữ `received_at` tại thiết bị và `synced_at` phía server. Retry dùng backoff và idempotency ngăn tạo trùng record. Attachment và audio transcription chưa được triển khai.
+
+Silent zone chỉ là cảnh báo **cần xác minh**: khu vực có hazard đang active nhưng vượt ngưỡng không có tin. Dashboard vẽ layer riêng, hiển thị thời gian im lặng và audit các quyết định `VERIFYING`, `SAFE`, `NEED_RESCUE`; không kết luận khu vực chắc chắn có nạn nhân.
+
+Trong `DEMO_MODE=true`, Dashboard có control panel scenario “Lũ quét và sạt lở Trà Linh”: Start, Pause, event kế tiếp, bơm tất cả, Reset và speed x1/x2/x5. Events đi qua API thật; reset chỉ xóa report/team/zone simulator. Xem [live demo script](docs/13-live-demo-script.md) để trình bày 3–5 phút.
+
+Xem [Current MVP](docs/14-current-mvp.md) để biết chính xác phần đã triển khai, demo accounts (MVP chưa có authentication), Bedrock setup, hướng AWS deployment và giới hạn hiện tại.
+
 ## API chính
 
 - `POST /api/rescue-requests`: Reporter gửi yêu cầu SOS.
 - `GET /api/rescue-requests/{request_code}/status`: xem trạng thái yêu cầu.
-- `GET /api/admin/rescue-requests`: danh sách yêu cầu, hỗ trợ filter.
+- `GET /api/admin/rescue-requests`: danh sách phân trang (`items`, `page`, `page_size`, `total`), filter và sort.
 - `GET /api/admin/rescue-requests/{id}`: chi tiết yêu cầu.
 - `PATCH /api/admin/rescue-requests/{id}`: cập nhật thông tin.
+- `POST /api/admin/rescue-requests/{id}/reanalyze`: chạy lại analyzer, chỉ cập nhật AI suggestion.
+- `GET /api/admin/rescue-requests/{id}/team-recommendations`: tối đa ba đề xuất đội có lý do/cảnh báo.
+- `GET /api/admin/rescue-requests/{id}/timeline`: lịch sử trạng thái/audit recalculation.
+- `GET /api/admin/rescue-requests/{id}/duplicates`: các đề xuất trùng có điểm và lý do.
+- `POST /api/admin/rescue-requests/{id}/duplicates/{candidate_id}/confirm|reject`: quyết định của admin.
+- `POST /api/admin/rescue-requests/{id}/merge`: gộp report đã xác nhận vào canonical incident, không xóa report gốc.
 - `POST /api/admin/rescue-requests/{id}/assign`: phân công đội.
 - `GET /api/admin/statistics`: thống kê dashboard.
+- `GET /api/admin/silent-zones`: các khu vực cần xác minh; `PATCH /api/admin/silent-zones/{id}/verification` ghi audit.
 - `GET /api/rescue-teams`: danh sách đội.
+- `GET /api/missions/{id}/events`: timeline event của nhiệm vụ.
 - `POST /api/rescue-teams`: tạo đội.
 - `GET /api/rescue-teams/{id}/missions`: nhiệm vụ của đội.
 - `PATCH /api/missions/{id}/status`: đội cứu hộ cập nhật trạng thái.
@@ -188,6 +254,7 @@ PYTHONPATH=. pytest
 4. Vào `/admin/requests/{id}`, xem lý do ưu tiên và giao đội.
 5. Mở `/rescue/{team_id}/missions`, đội cứu hộ cập nhật `ACCEPTED`, `MOVING`, `ARRIVED`, `RESCUING`.
 6. Cập nhật `COMPLETED`, dashboard ghi nhận nhiệm vụ hoàn thành.
+7. Trong demo mode, dùng panel Trà Linh để bơm scenario và reset an toàn.
 
 ## Giới hạn của MVP
 
@@ -196,7 +263,7 @@ Current MVP:
 - Chưa tích hợp SMS Gateway thật.
 - Chưa tích hợp Zalo API thật.
 - Chưa xử lý cuộc gọi thật.
-- AI hiện dùng rule hoặc mock service.
+- Bedrock chỉ hoạt động khi có IAM/model access; mặc định vẫn là mock fallback.
 - Chưa có dữ liệu thời tiết thời gian thực.
 - Chưa tối ưu điều phối theo tuyến đường.
 - Chưa triển khai xác thực production.
@@ -209,10 +276,7 @@ Future Development:
 - Tích hợp Zalo và các nguồn mạng xã hội.
 - Chuyển giọng nói thành dữ liệu có cấu trúc.
 - Dùng Amazon Bedrock hoặc LLM để phân tích tiếng Việt tự do.
-- Hỗ trợ PWA offline và store-and-forward.
-- Đồng bộ khi thiết bị bắt lại được kết nối.
 - Khử trùng lặp theo vị trí và ngữ nghĩa.
-- Nhận diện vùng im lặng hoặc khu vực mất tín hiệu.
 - Tích hợp dữ liệu thời tiết và cảnh báo thiên tai.
 - Đề xuất đội cứu hộ dựa trên khoảng cách, phương tiện và năng lực.
 - Theo dõi audit log cho toàn bộ quyết định.
@@ -221,7 +285,4 @@ Future Development:
 - Mở rộng bằng Kubernetes khi số lượng người dùng và yêu cầu tăng.
 - Mở rộng sang cháy nổ, tai nạn giao thông, cấp cứu y tế và tìm kiếm người mất tích.
 
-Tài khoản giả lập:
-
-- Admin: `admin@sosflow.local`
-- Rescue Team: `rescue@sosflow.local`
+Demo accounts: chưa có. MVP chưa triển khai authentication/authorization production.

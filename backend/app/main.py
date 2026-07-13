@@ -23,6 +23,10 @@ app.add_middleware(
 )
 
 app.include_router(router)
+if settings.demo_mode:
+    from app.api.demo_routes import router as demo_router
+
+    app.include_router(demo_router)
 
 
 @app.on_event("startup")
