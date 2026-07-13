@@ -3,7 +3,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
-from app.models.entities import RequestStatus, RescueMission, RescueRequest, RescueTeam, SilentZoneHistory, StatusHistory, TeamStatus
+from app.models.entities import RequestStatus, RescueMission, RescueRequest, RescueStation, RescueTeam, SilentZoneHistory, StatusHistory, TeamStatus
 from app.schemas.rescue import (
     AssignRequest,
     DuplicateCandidateOut,
@@ -20,6 +20,7 @@ from app.schemas.rescue import (
     RescueRequestUpdate,
     RescueTeamCreate,
     RescueTeamOut,
+    RescueStationOut,
     StatisticsOut,
     StatusHistoryOut,
     TeamRecommendationOut,
@@ -205,7 +206,15 @@ def silent_zone_timeline(zone_id: int, db: Session = Depends(get_db)):
 
 @router.get("/api/rescue-teams", response_model=list[RescueTeamOut])
 def list_teams(db: Session = Depends(get_db)):
-    return db.scalars(select(RescueTeam).order_by(RescueTeam.id)).all()
+    return db.scalars(select(RescueTeam).options(joinedload(RescueTeam.station)).order_by(RescueTeam.id)).all()
+
+
+@router.get("/api/rescue-stations", response_model=list[RescueStationOut])
+def list_rescue_stations(area_code: str | None = None, db: Session = Depends(get_db)):
+    stmt = select(RescueStation).where(RescueStation.is_active.is_(True))
+    if area_code:
+        stmt = stmt.where(RescueStation.area_code == area_code.upper())
+    return db.scalars(stmt.order_by(RescueStation.area_code, RescueStation.code)).all()
 
 
 @router.post("/api/rescue-teams", response_model=RescueTeamOut)

@@ -21,10 +21,27 @@ export type RescueTeam = {
   capabilities: string[];
   equipment: string[];
   max_people_capacity?: number;
+  station_id?: number;
+  station?: RescueStation;
   latitude?: number;
   longitude?: number;
+  current_latitude?: number;
+  current_longitude?: number;
+  last_location_update?: string;
   status: "AVAILABLE" | "BUSY" | "OFFLINE";
   active_mission_count: number;
+};
+
+export type RescueStation = {
+  id: number;
+  code: string;
+  name: string;
+  area_code: "TRA_LINH" | "DA_NANG" | string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+  is_simulated: boolean;
+  is_active: boolean;
 };
 
 export type RescueRequest = {
@@ -158,6 +175,7 @@ export const api = {
   getSilentZones: (alertsOnly = false) => request<SilentZone[]>(`/api/admin/silent-zones${alertsOnly ? "?alerts_only=true" : ""}`),
   updateSilentZone: (id: number, status: string, note?: string) => request<SilentZone>(`/api/admin/silent-zones/${id}/verification`, { method: "PATCH", body: JSON.stringify({ status, note }) }),
   getTeams: () => request<RescueTeam[]>("/api/rescue-teams"),
+  getRescueStations: (areaCode?: string) => request<RescueStation[]>(`/api/rescue-stations${areaCode ? `?area_code=${encodeURIComponent(areaCode)}` : ""}`),
   assign: (id: number, teamId: number, note?: string) => request<Mission>(`/api/admin/rescue-requests/${id}/assign`, { method: "POST", body: JSON.stringify({ team_id: teamId, note }) }),
   getTeamMissions: (teamId: string) => request<Mission[]>(`/api/rescue-teams/${teamId}/missions`),
   updateMission: (missionId: number, status: string, note?: string) => request<Mission>(`/api/missions/${missionId}/status`, { method: "PATCH", body: JSON.stringify({ status, note }) }),

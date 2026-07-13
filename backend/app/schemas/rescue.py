@@ -50,6 +50,20 @@ class RescueRequestCreate(BaseModel):
         return as_utc(value) if value else None
 
 
+class RescueStationOut(UTCResponseModel):
+    id: int
+    code: str
+    name: str
+    area_code: str
+    address: str | None
+    latitude: float
+    longitude: float
+    is_simulated: bool
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
 class RescueTeamOut(UTCResponseModel):
     id: int
     name: str
@@ -59,6 +73,8 @@ class RescueTeamOut(UTCResponseModel):
     capabilities: list[str]
     equipment: list[str]
     max_people_capacity: int | None
+    station_id: int | None
+    station: RescueStationOut | None = None
     latitude: float | None
     longitude: float | None
     current_latitude: float | None
@@ -152,6 +168,7 @@ class RescueTeamCreate(BaseModel):
     capabilities: list[str] = Field(default_factory=list, max_length=30)
     equipment: list[str] = Field(default_factory=list, max_length=30)
     max_people_capacity: int | None = Field(default=None, ge=1)
+    station_id: int | None = None
     latitude: float | None = None
     longitude: float | None = None
     current_latitude: float | None = None

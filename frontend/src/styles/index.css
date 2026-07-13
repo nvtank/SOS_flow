@@ -172,6 +172,10 @@ textarea.field { height: auto; border-radius: 18px; }
 .dashboard-map { height: 520px; margin-top: 14px; border: 0 !important; border-radius: 10px !important; }
 .map-legend { display: flex; flex-wrap: wrap; gap: 12px; color: #667085; font-size: 10px; }
 .map-legend span { display: inline-flex; align-items: center; gap: 5px; }.map-legend i { width: 8px; height: 8px; border-radius: 50%; }.map-legend .critical{background:#b42318}.map-legend .high{background:#f79009}.map-legend .normal{background:#17b26a}
+.map-region-tabs { display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
+.map-region-tabs button { border:1px solid #dfe6ee; border-radius:999px; background:#fff; color:#667085; padding:5px 11px; font-size:11px; font-weight:700; }
+.map-region-tabs button.active { border-color:#0b63ce; background:#eaf3ff; color:#0b63ce; }
+.station-popup { display:grid; gap:5px; min-width:190px; }.station-popup__eyebrow{color:#0b63ce;font-size:9px;font-weight:800;letter-spacing:.06em}.station-popup strong{color:#101828}.station-popup p{margin:0;color:#667085;font-size:11px}.station-popup__coords{font-family:ui-monospace,SFMono-Regular,monospace;font-size:10px!important}.station-popup__teams{display:grid;gap:4px;margin-top:3px;border-top:1px solid #e7edf4;padding-top:6px}.station-popup__teams div{display:flex;justify-content:space-between;gap:9px;font-size:10px}.station-popup__teams b{color:#0b63ce;font-size:9px}.station-popup small{color:#98a2b3;font-size:9px}
 .action-panel { min-width: 0; padding: 18px; }
 .action-panel > .card-heading > svg { color: #d92d20; }
 .action-list { display: grid; gap: 7px; margin-top: 14px; }

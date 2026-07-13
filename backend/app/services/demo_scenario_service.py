@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.time import utc_now
-from app.models.entities import DemoScenarioState, MissionStatus, RequestStatus, RescueRequest, RescueTeam, SilentZone, SilentZoneHistory, TeamStatus
+from app.models.entities import DemoScenarioState, MissionStatus, RequestStatus, RescueRequest, RescueStation, RescueTeam, SilentZone, SilentZoneHistory, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
 from app.services.intake_service import intake_rescue_request
 from app.services.rescue_service import assign_request, transition_request, update_mission_status
@@ -47,7 +47,11 @@ def _state(db: Session) -> DemoScenarioState:
 def _scenario_team(db: Session, name: str, capabilities: list[str]) -> RescueTeam:
     team = db.scalar(select(RescueTeam).where(RescueTeam.name == name))
     if not team:
-        team = RescueTeam(name=name, status=TeamStatus.AVAILABLE.value, vehicle_type="Xuồng cứu hộ", capabilities=capabilities, equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=10, latitude=22.49, longitude=104.40, current_latitude=22.49, current_longitude=104.40)
+        station = db.scalar(select(RescueStation).where(RescueStation.code == "TRL-01"))
+        if not station:
+            from app.db.seed import ensure_rescue_stations
+            station = ensure_rescue_stations(db)["TRL-01"]
+        team = RescueTeam(name=name, status=TeamStatus.AVAILABLE.value, vehicle_type="Xuồng cứu hộ", capabilities=capabilities, equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=10, station_id=station.id, latitude=station.latitude, longitude=station.longitude, current_latitude=station.latitude, current_longitude=station.longitude)
         db.add(team); db.commit(); db.refresh(team)
     return team
 

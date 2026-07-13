@@ -3,14 +3,16 @@
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.entities import RescueRequest, RescueTeam, TeamStatus
 
 
 def _distance_km(request: RescueRequest, team: RescueTeam) -> float | None:
-    latitude = team.current_latitude if team.current_latitude is not None else team.latitude
-    longitude = team.current_longitude if team.current_longitude is not None else team.longitude
+    # Current GPS is used only when supplied; otherwise the fixed rescue station
+    # is the transparent and repeatable dispatch origin for MVP/demo.
+    latitude = team.current_latitude if team.current_latitude is not None else (team.station.latitude if team.station else team.latitude)
+    longitude = team.current_longitude if team.current_longitude is not None else (team.station.longitude if team.station else team.longitude)
     if None in (request.latitude, request.longitude, latitude, longitude): return None
     lat1, lon1, lat2, lon2 = map(radians, (request.latitude, request.longitude, latitude, longitude))
     value = sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lon2 - lon1) / 2) ** 2
@@ -30,10 +32,10 @@ def recommend_teams(db: Session, request_id: int, limit: int = 3) -> list[dict]:
     request = db.get(RescueRequest, request_id)
     if not request: raise ValueError("Rescue request not found")
     requirements = _required_capabilities(request); recommendations = []
-    for team in db.scalars(select(RescueTeam).where(RescueTeam.status == TeamStatus.AVAILABLE.value)).all():
+    for team in db.scalars(select(RescueTeam).options(joinedload(RescueTeam.station)).where(RescueTeam.status == TeamStatus.AVAILABLE.value)).all():
         reasons = ["Đội đang sẵn sàng"]; warnings = []; score = 45
         distance = _distance_km(request, team)
-        if distance is None: warnings.append("Thiếu vị trí đội hoặc sự cố; không thể tính khoảng cách")
+        if distance is None: warnings.append("Thiếu vị trí trạm/đội hoặc sự cố; không thể tính khoảng cách")
         else:
             score += max(0, 25 - int(distance * 2)); reasons.append(f"Cách sự cố khoảng {distance:.1f} km theo đường thẳng")
         capabilities = set(team.capabilities or [])

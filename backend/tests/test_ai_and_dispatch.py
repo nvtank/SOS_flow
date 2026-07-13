@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.session import Base
-from app.models.entities import MissionEvent, MissionStatus, RequestStatus, RescueRequest, RescueTeam, TeamStatus
+from app.models.entities import MissionEvent, MissionStatus, RequestStatus, RescueRequest, RescueStation, RescueTeam, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
 from app.services import ai_analyzer, rescue_service
 from app.services.ai_analyzer import BedrockEmergencyAnalyzer, EmergencyAnalysis
@@ -90,6 +90,20 @@ def test_recommendation_prefers_capable_nearby_available_team_without_assigning(
     assert recommendations[0]["team_id"] == nearby.id
     assert offline.id not in {item["team_id"] for item in recommendations}
     assert db.get(RescueRequest, request.id).assigned_team_id is None
+
+
+def test_recommendation_uses_fixed_rescue_station_when_live_gps_is_missing(db):
+    station = RescueStation(code="DNG-TEST", name="Trạm test Đà Nẵng", area_code="DA_NANG", latitude=16.050, longitude=108.200)
+    request = rescue_service.create_rescue_request(db, RescueRequestCreate(message="Nước dâng rất nhanh", latitude=16.052, longitude=108.202, number_of_people=2, is_trapped=True))
+    team = RescueTeam(name="Đội từ trạm", status=TeamStatus.AVAILABLE.value, station=station, capabilities=["flood_rescue"], max_people_capacity=6)
+    db.add_all([station, team]); db.commit()
+
+    recommendation = recommend_teams(db, request.id)[0]
+
+    assert recommendation["team_id"] == team.id
+    assert recommendation["estimated_distance_km"] is not None
+    assert recommendation["estimated_distance_km"] < 1
+    assert any("đường thẳng" in reason for reason in recommendation["reasons"])
 
 
 def test_blocked_reinforcement_lifecycle_records_mission_events(db):

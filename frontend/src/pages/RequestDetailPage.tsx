@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, DuplicateCandidate, RescueRequest, RescueTeam, StatusHistory, TeamRecommendation } from "../api/client";
+import { api, DuplicateCandidate, RescueRequest, RescueStation, RescueTeam, StatusHistory, TeamRecommendation } from "../api/client";
 import { DuplicateBadge, PriorityBadge, SourceBadge, StatusBadge } from "../components/Badges";
 import { RequestMap } from "../components/RequestMap";
 import { useI18n } from "../i18n";
@@ -10,6 +10,7 @@ export function RequestDetailPage() {
   const { id = "" } = useParams();
   const [request, setRequest] = useState<RescueRequest>();
   const [teams, setTeams] = useState<RescueTeam[]>([]);
+  const [stations, setStations] = useState<RescueStation[]>([]);
   const [teamId, setTeamId] = useState("");
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
@@ -22,6 +23,7 @@ export function RequestDetailPage() {
   useEffect(() => {
     api.getRequest(id).then(setRequest);
     api.getTeams().then(setTeams);
+    api.getRescueStations().then(setStations);
     api.getDuplicates(Number(id)).then(setCandidates);
     api.getTimeline(Number(id)).then(setTimeline);
     api.getTeamRecommendations(Number(id)).then(setRecommendations);
@@ -117,7 +119,7 @@ export function RequestDetailPage() {
         <div><h2 className="mb-2 font-bold">{t("detail.timeline")}</h2><ol className="space-y-2 border-l border-slate-200 pl-4 text-sm">{timeline.map((event) => <li key={event.id}><div className="font-semibold">{event.new_status} <span className="font-normal text-slate-500">· {event.changed_by}</span></div><div className="text-slate-500">{new Date(event.created_at).toLocaleString(locale)}{event.note ? ` · ${event.note}` : ""}</div></li>)}{!timeline.length && <li className="text-slate-500">{t("detail.noHistory")}</li>}</ol></div>
       </section>
       <aside className="space-y-4">
-        <RequestMap requests={[request]} />
+        <RequestMap requests={[request]} stations={stations} teams={teams} showNearestTeams />
         <div className="apple-utility-card"><h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.recommendations")}</h2><div className="space-y-3">{recommendations.map((item) => <div key={item.team_id} className="border-t border-slate-200 py-3 text-sm"><div className="font-semibold">{item.team_name} · {item.recommendation_score}/100</div><p>{item.estimated_distance_km === undefined ? t("detail.noDistance") : `${item.estimated_distance_km} ${t("detail.straightDistance")}`} · {item.vehicle_type ?? t("detail.noVehicle")}</p><p className="mt-1 text-slate-600">{item.reasons.join(" · ")}</p>{item.warnings.map((warning) => <p key={warning} className="mt-1 text-amber-700">⚠ {warning}</p>)}</div>)}{!recommendations.length && <p className="text-sm text-slate-500">{t("detail.noTeam")}</p>}</div></div>
         <div className="apple-utility-card">
           <h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.assignment")}</h2>

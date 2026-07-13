@@ -138,6 +138,26 @@ class RescueRequest(Base):
     )
 
 
+class RescueStation(Base):
+    """A fixed operational base, not a live GPS position."""
+
+    __tablename__ = "rescue_stations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    area_code: Mapped[str] = mapped_column(String(32), index=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    is_simulated: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    teams: Mapped[list["RescueTeam"]] = relationship(back_populates="station")
+
+
 class RescueTeam(Base):
     __tablename__ = "rescue_teams"
 
@@ -149,6 +169,7 @@ class RescueTeam(Base):
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
     equipment: Mapped[list[str]] = mapped_column(JSON, default=list)
     max_people_capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    station_id: Mapped[int | None] = mapped_column(ForeignKey("rescue_stations.id"), nullable=True, index=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     current_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -161,6 +182,7 @@ class RescueTeam(Base):
 
     requests: Mapped[list[RescueRequest]] = relationship(back_populates="assigned_team")
     missions: Mapped[list["RescueMission"]] = relationship(back_populates="team")
+    station: Mapped["RescueStation | None"] = relationship(back_populates="teams")
 
 
 class RescueMission(Base):

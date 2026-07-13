@@ -3,21 +3,75 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import RescueRequest, RescueTeam, TeamStatus
+from app.models.entities import RescueRequest, RescueStation, RescueTeam, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
 from app.core.time import utc_now
 from app.models.entities import RequestStatus
 from app.services.rescue_service import create_rescue_request, transition_request
 
 
+STATION_SEED = [
+    # Demo reference points only; they are not claims about real government bases.
+    {"code": "TRL-01", "name": "Trạm SOSFlow Trà Linh 01", "area_code": "TRA_LINH", "address": "Khu vực cầu Trà Linh", "latitude": 22.4900, "longitude": 104.4000},
+    {"code": "TRL-02", "name": "Trạm SOSFlow Trà Linh 02", "area_code": "TRA_LINH", "address": "Khu vực Nà Lạn", "latitude": 22.5090, "longitude": 104.4230},
+    {"code": "DNG-01", "name": "Trạm SOSFlow Đà Nẵng 01", "area_code": "DA_NANG", "address": "Liên Chiểu", "latitude": 16.0750, "longitude": 108.1700},
+    {"code": "DNG-02", "name": "Trạm SOSFlow Đà Nẵng 02", "area_code": "DA_NANG", "address": "Hòa Liên", "latitude": 16.1100, "longitude": 108.1200},
+    {"code": "DNG-03", "name": "Trạm SOSFlow Đà Nẵng 03", "area_code": "DA_NANG", "address": "Hải Châu", "latitude": 16.0600, "longitude": 108.2150},
+]
+
+DEFAULT_TEAM_STATIONS = {
+    "Đội Xuồng Cứu Hộ 01": "DNG-01",
+    "Đội Y Tế Cơ Động 02": "DNG-03",
+    "Đội Leo Dây 03": "DNG-02",
+}
+
+
+def ensure_rescue_stations(db: Session) -> dict[str, RescueStation]:
+    stations: dict[str, RescueStation] = {}
+    for values in STATION_SEED:
+        station = db.scalar(select(RescueStation).where(RescueStation.code == values["code"]))
+        if not station:
+            station = RescueStation(**values, is_simulated=True, is_active=True)
+            db.add(station)
+        stations[values["code"]] = station
+    db.commit()
+    for station in stations.values():
+        db.refresh(station)
+    return stations
+
+
+def _station_for_team(team: RescueTeam, stations: dict[str, RescueStation]) -> RescueStation:
+    latitude = team.current_latitude if team.current_latitude is not None else team.latitude
+    # The two intentional map scopes are Trà Linh and Đà Nẵng only.
+    if latitude is not None and latitude > 20:
+        return stations["TRL-01"]
+    return stations["DNG-01"]
+
+
 def seed_database(db: Session) -> None:
-    if db.scalar(select(RescueTeam).limit(1)):
+    stations = ensure_rescue_stations(db)
+    existing_teams = db.scalars(select(RescueTeam)).all()
+    if existing_teams:
+        changed = False
+        for team in existing_teams:
+            desired_station = stations.get(DEFAULT_TEAM_STATIONS.get(team.name, ""))
+            if team.station_id is None or desired_station is not None:
+                station = desired_station or _station_for_team(team, stations)
+                if team.station_id == station.id:
+                    continue
+                team.station_id = station.id
+                # Seed/demo teams have no live tracking, so base location is fixed.
+                team.latitude = station.latitude; team.longitude = station.longitude
+                team.current_latitude = station.latitude; team.current_longitude = station.longitude
+                changed = True
+        if changed:
+            db.commit()
         return
 
     teams = [
-        RescueTeam(name="Đội Xuồng Cứu Hộ 01", phone_number="0901000001", member_count=6, vehicle_type="Xuồng máy", latitude=16.0471, longitude=108.2068, current_latitude=16.0471, current_longitude=108.2068, capabilities=["flood_rescue", "medical"], equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=12, status=TeamStatus.AVAILABLE.value),
-        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", latitude=16.0602, longitude=108.223, current_latitude=16.0602, current_longitude=108.223, capabilities=["medical"], equipment=["cáng", "oxy", "túi sơ cứu"], max_people_capacity=4, status=TeamStatus.BUSY.value),
-        RescueTeam(name="Đội Leo Dây 03", phone_number="0901000003", member_count=5, vehicle_type="Xe bán tải", latitude=16.031, longitude=108.19, current_latitude=16.031, current_longitude=108.19, capabilities=["landslide"], equipment=["dây thừng", "mũ bảo hộ"], max_people_capacity=5, status=TeamStatus.OFFLINE.value),
+        RescueTeam(name="Đội Xuồng Cứu Hộ 01", phone_number="0901000001", member_count=6, vehicle_type="Xuồng máy", station_id=stations["DNG-01"].id, latitude=stations["DNG-01"].latitude, longitude=stations["DNG-01"].longitude, current_latitude=stations["DNG-01"].latitude, current_longitude=stations["DNG-01"].longitude, capabilities=["flood_rescue", "medical"], equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=12, status=TeamStatus.AVAILABLE.value),
+        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", station_id=stations["DNG-03"].id, latitude=stations["DNG-03"].latitude, longitude=stations["DNG-03"].longitude, current_latitude=stations["DNG-03"].latitude, current_longitude=stations["DNG-03"].longitude, capabilities=["medical"], equipment=["cáng", "oxy", "túi sơ cứu"], max_people_capacity=4, status=TeamStatus.BUSY.value),
+        RescueTeam(name="Đội Leo Dây 03", phone_number="0901000003", member_count=5, vehicle_type="Xe bán tải", station_id=stations["DNG-02"].id, latitude=stations["DNG-02"].latitude, longitude=stations["DNG-02"].longitude, current_latitude=stations["DNG-02"].latitude, current_longitude=stations["DNG-02"].longitude, capabilities=["landslide"], equipment=["dây thừng", "mũ bảo hộ"], max_people_capacity=5, status=TeamStatus.OFFLINE.value),
     ]
     db.add_all(teams)
     db.commit()

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, MapPin, RefreshCw, ShieldCheck, Users, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, DemoScenarioState, RescueRequest, SilentZone, Statistics } from "../api/client";
+import { api, DemoScenarioState, RescueRequest, RescueStation, RescueTeam, SilentZone, Statistics } from "../api/client";
 import { DonutChart, HorizontalBars, TimelineChart } from "../components/DashboardCharts";
 import { DuplicateBadge, PriorityBadge, SourceBadge, StatusBadge } from "../components/Badges";
-import { RequestMap } from "../components/RequestMap";
+import { MapArea, RequestMap } from "../components/RequestMap";
 import { useI18n } from "../i18n";
 
 const isDemo = import.meta.env.VITE_DEMO_MODE === "true";
@@ -18,18 +18,23 @@ export function DashboardPage() {
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date>();
   const [zones, setZones] = useState<SilentZone[]>([]);
+  const [stations, setStations] = useState<RescueStation[]>([]);
+  const [teams, setTeams] = useState<RescueTeam[]>([]);
+  const [mapArea, setMapArea] = useState<MapArea>(isDemo ? "TRA_LINH" : "DA_NANG");
   const [scenario, setScenario] = useState<DemoScenarioState>();
   const [demoMessage, setDemoMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
       setError("");
-      const [nextStats, nextRequests, nextZones] = await Promise.all([
+      const [nextStats, nextRequests, nextZones, nextStations, nextTeams] = await Promise.all([
         api.getStats(),
         api.getRequests("?page_size=100&sort_by=priority_score&sort_order=desc"),
         api.getSilentZones(true),
+        api.getRescueStations(),
+        api.getTeams(),
       ]);
-      setStats(nextStats); setRequests(nextRequests.items); setZones(nextZones); setUpdatedAt(new Date());
+      setStats(nextStats); setRequests(nextRequests.items); setZones(nextZones); setStations(nextStations); setTeams(nextTeams); setUpdatedAt(new Date());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load Command Center data.");
     } finally { setLoading(false); }
@@ -101,8 +106,11 @@ export function DashboardPage() {
 
     <div className="dashboard-primary-grid">
       <section className="dashboard-card map-card">
-        <div className="card-heading"><div><h2>{t("dashboard.map")}</h2><p>{t("dashboard.mapHint")}</p></div><div className="map-legend"><span><i className="critical" />Critical</span><span><i className="high" />High</span><span><i className="normal" />Normal</span></div></div>
-        <RequestMap requests={requests} zones={zones} className="dashboard-map" />
+        <div className="card-heading"><div><h2>{t("dashboard.map")}</h2><p>{t("dashboard.mapHint")} · Trạm là điểm cố định; nét đứt là khoảng cách đường thẳng.</p></div><div className="map-legend"><span><i className="critical" />Critical</span><span><i className="high" />High</span><span><i className="normal" />Normal</span></div></div>
+        <div className="map-region-tabs" role="group" aria-label="Map area">
+          {(["TRA_LINH", "DA_NANG", "ALL"] as MapArea[]).map((area) => <button key={area} onClick={() => setMapArea(area)} className={mapArea === area ? "active" : ""}>{area === "TRA_LINH" ? "Trà Linh" : area === "DA_NANG" ? "Đà Nẵng" : "Tất cả"}</button>)}
+        </div>
+        <RequestMap requests={requests} zones={zones} stations={stations} teams={teams} area={mapArea} showAssignedConnections className="dashboard-map" />
       </section>
       <ActionPanel stats={stats} zones={zones} missingLocation={missingLocation} load={load} />
     </div>
