@@ -7,6 +7,13 @@
 - RescueMission: nhiệm vụ gắn request với team.
 - StatusHistory: lịch sử thay đổi trạng thái.
 
+Nhóm dữ liệu quan trọng của `RescueRequest`:
+
+- Thông tin liên hệ: tên, số điện thoại.
+- Nội dung SOS: message, address, latitude, longitude.
+- Tình trạng nguy hiểm: số người, trẻ em, người cao tuổi, bị thương, mắc kẹt, mực nước.
+- Điều phối: priority score, priority level, reasons, status, assigned team.
+
 ```mermaid
 erDiagram
     RescueTeam ||--o{ RescueRequest : assigned
