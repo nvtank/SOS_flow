@@ -24,15 +24,15 @@ def _report(external_reference: str, source: str, message: str, **values) -> Res
 
 
 REPORT_EVENTS = [
-    ("112 critical", _report("trl-112", "CALL_112", "112 báo 6 người, có 2 trẻ em bị mắc kẹt gần cầu Trà Linh, nước cuốn mạnh.", address="Cầu Trà Linh", latitude=22.494, longitude=104.406, number_of_people=6, number_of_children=2, is_trapped=True, number_of_injured=1, water_level=2.8)),
-    ("SMS sai chính tả", _report("trl-sms", "SMS", "cuu voi nha e ngap gan noc co 3 nguoi o cau tra linh", address="Cầu Trà Linh", latitude=22.4944, longitude=104.4062, number_of_people=3, is_trapped=True, water_level=2.4)),
-    ("Web report", _report("trl-web", "WEB", "Nhà gần cầu Trà Linh có ba người, nước lên nhanh, không thể ra ngoài.", address="Gần cầu Trà Linh", latitude=22.4942, longitude=104.4061, number_of_people=3, is_trapped=True, water_level=2.2)),
-    ("Zalo simulator", _report("trl-zalo", "ZALO", "Zalo giả lập: 3 người mắc kẹt ở cầu Trà Linh, nước rất cao.", address="Cầu Trà Linh", latitude=22.4943, longitude=104.4060, number_of_people=3, is_trapped=True, water_level=2.3)),
-    ("Cán bộ xã", _report("trl-officer", "LOCAL_OFFICER", "Cán bộ xã xác nhận hộ dân gần cầu Trà Linh có người mắc kẹt.", address="Cầu Trà Linh", latitude=22.4941, longitude=104.4063, number_of_people=3, is_trapped=True, water_level=2.1)),
-    ("Critical trẻ em chưa giao đội", _report("trl-children", "WEB", "Có 4 trẻ em và 2 người lớn mắc kẹt tại thôn Nà Lạn, một người bị thương nặng.", address="Thôn Nà Lạn, Trà Linh", latitude=22.505, longitude=104.418, number_of_people=6, number_of_children=4, number_of_injured=1, is_trapped=True, water_level=2.9)),
+    ("112 critical", _report("trl-112", "CALL_112", "112 báo 6 người, có 2 trẻ em bị mắc kẹt gần Thôn 3, nước cuốn mạnh.", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0232, longitude=108.0409, number_of_people=6, number_of_children=2, is_trapped=True, number_of_injured=1, water_level=2.8)),
+    ("SMS sai chính tả", _report("trl-sms", "SMS", "cuu voi nha e ngap gan noc co 3 nguoi o thon 3 tra linh", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0236, longitude=108.0411, number_of_people=3, is_trapped=True, water_level=2.4)),
+    ("Web report", _report("trl-web", "WEB", "Nhà gần Thôn 3, Xã Trà Linh có ba người, nước lên nhanh, không thể ra ngoài.", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0234, longitude=108.0410, number_of_people=3, is_trapped=True, water_level=2.2)),
+    ("Zalo simulator", _report("trl-zalo", "ZALO", "Zalo giả lập: 3 người mắc kẹt ở Thôn 3, Xã Trà Linh, nước rất cao.", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0235, longitude=108.0410, number_of_people=3, is_trapped=True, water_level=2.3)),
+    ("Cán bộ xã", _report("trl-officer", "LOCAL_OFFICER", "Cán bộ xã xác nhận hộ dân gần Thôn 3, Xã Trà Linh có người mắc kẹt.", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0233, longitude=108.0412, number_of_people=3, is_trapped=True, water_level=2.1)),
+    ("Critical trẻ em chưa giao đội", _report("trl-children", "WEB", "Có 4 trẻ em và 2 người lớn mắc kẹt gần Nhà văn hóa Konpin, một người bị thương nặng.", address="Nhà văn hóa Konpin, Thôn 2, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0350, longitude=108.0550, number_of_people=6, number_of_children=4, number_of_injured=1, is_trapped=True, water_level=2.9)),
     ("Tin thiếu tọa độ", _report("trl-missing-location", "PHONE", "Nhà bị sạt lở, 2 người già cần hỗ trợ nhưng sóng rất yếu.", address=None, number_of_people=2, number_of_elderly=2)),
-    ("Offline sync muộn", _report("trl-offline-late", "OFFLINE_SYNC", "Cán bộ ghi nhận offline: 2 người cần sơ cứu sau lũ.", address="Xóm Suối Mây", latitude=22.51, longitude=104.43, number_of_people=2, number_of_injured=1, received_at=utc_now() - timedelta(minutes=47))),
-    ("Tin xã hội bình thường", _report("trl-social", "SOCIAL_MEDIA", "Người dân khu chợ tạm thời an toàn, cần nước uống.", address="Chợ Trà Linh", latitude=22.49, longitude=104.40, number_of_people=5, water_level=0.4)),
+    ("Offline sync muộn", _report("trl-offline-late", "OFFLINE_SYNC", "Cán bộ ghi nhận offline: 2 người cần sơ cứu sau lũ.", address="Thôn 2, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0280, longitude=108.0480, number_of_people=2, number_of_injured=1, received_at=utc_now() - timedelta(minutes=47))),
+    ("Tin xã hội bình thường", _report("trl-social", "SOCIAL_MEDIA", "Người dân khu chợ tạm thời an toàn, cần nước uống.", address="Nhà văn hóa Konpin, Thôn 2, Xã Trà Linh, thành phố Đà Nẵng", latitude=15.0348, longitude=108.0547, number_of_people=5, water_level=0.4)),
 ]
 
 
@@ -87,9 +87,9 @@ def _reinforcement_mission(db: Session) -> list[int]:
 
 
 def _silent_zone(db: Session) -> list[int]:
-    zone = db.scalar(select(SilentZone).where(SilentZone.scenario_key == SCENARIO_KEY, SilentZone.name == "Khe Nậm Chảy"))
+    zone = db.scalar(select(SilentZone).where(SilentZone.scenario_key == SCENARIO_KEY, SilentZone.name == "Khu vực cần xác minh Trà Linh"))
     if not zone:
-        zone = SilentZone(name="Khe Nậm Chảy", scenario_key=SCENARIO_KEY, latitude=22.535, longitude=104.455, radius_meters=1_200, hazard_active=True, last_report_at=utc_now() - timedelta(minutes=50), silence_threshold_minutes=20)
+        zone = SilentZone(name="Khu vực cần xác minh Trà Linh", scenario_key=SCENARIO_KEY, latitude=15.0600, longitude=108.0900, radius_meters=1_200, hazard_active=True, last_report_at=utc_now() - timedelta(minutes=50), silence_threshold_minutes=20)
         db.add(zone); db.flush()
         db.add(SilentZoneHistory(zone_id=zone.id, old_status=None, new_status=zone.verification_status, actor="demo", note="Khu vực cần xác minh trong scenario Trà Linh"))
         db.commit()
@@ -106,7 +106,7 @@ def _inject_event(db: Session, index: int) -> tuple[str, list[int]]:
     if index == len(REPORT_EVENTS) + 1:
         return "Mission NEED_REINFORCEMENT", _reinforcement_mission(db)
     if index == len(REPORT_EVENTS) + 2:
-        return "Vùng im lặng Khe Nậm Chảy", _silent_zone(db)
+        return "Vùng im lặng cần xác minh tại Trà Linh", _silent_zone(db)
     raise HTTPException(status_code=409, detail="Scenario is already complete")
 
 

@@ -14,7 +14,7 @@ const AREA_LABELS: Record<MapArea, string> = { ALL: "Trà Linh + Đà Nẵng", T
 
 function isInArea(latitude: number, longitude: number, area: MapArea) {
   if (area === "ALL") return true;
-  if (area === "TRA_LINH") return latitude >= 22.40 && latitude <= 22.65 && longitude >= 104.25 && longitude <= 104.60;
+  if (area === "TRA_LINH") return latitude >= 14.94 && latitude <= 15.11 && longitude >= 107.94 && longitude <= 108.18;
   return latitude >= 15.85 && latitude <= 16.25 && longitude >= 107.90 && longitude <= 108.35;
 }
 
@@ -68,7 +68,7 @@ export function RequestMap({
   const visibleStations = useMemo(() => stations.filter((station) => area === "ALL" || station.area_code === area), [stations, area]);
   const visibleZones = useMemo(() => zones.filter((zone) => isInArea(zone.latitude, zone.longitude, area)), [zones, area]);
   const boundsPoints = useMemo<Located[]>(() => [...points, ...visibleStations].map(({ latitude, longitude }) => ({ latitude, longitude })), [points, visibleStations]);
-  const center: L.LatLngExpression = boundsPoints.length ? [boundsPoints[0].latitude, boundsPoints[0].longitude] : area === "TRA_LINH" ? [22.50, 104.41] : [16.06, 108.20];
+  const center: L.LatLngExpression = boundsPoints.length ? [boundsPoints[0].latitude, boundsPoints[0].longitude] : area === "TRA_LINH" ? [15.023565, 108.041263] : [16.06, 108.20];
   const nearestLines = useMemo(() => {
     if (!showNearestTeams || points.length !== 1) return [];
     const request = points[0];

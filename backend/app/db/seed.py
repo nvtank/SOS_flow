@@ -11,18 +11,18 @@ from app.services.rescue_service import create_rescue_request, transition_reques
 
 
 STATION_SEED = [
-    # Demo reference points only; they are not claims about real government bases.
-    {"code": "TRL-01", "name": "Trạm SOSFlow Trà Linh 01", "area_code": "TRA_LINH", "address": "Khu vực cầu Trà Linh", "latitude": 22.4900, "longitude": 104.4000},
-    {"code": "TRL-02", "name": "Trạm SOSFlow Trà Linh 02", "area_code": "TRA_LINH", "address": "Khu vực Nà Lạn", "latitude": 22.5090, "longitude": 104.4230},
-    {"code": "DNG-01", "name": "Trạm SOSFlow Đà Nẵng 01", "area_code": "DA_NANG", "address": "Liên Chiểu", "latitude": 16.0750, "longitude": 108.1700},
-    {"code": "DNG-02", "name": "Trạm SOSFlow Đà Nẵng 02", "area_code": "DA_NANG", "address": "Hòa Liên", "latitude": 16.1100, "longitude": 108.1200},
-    {"code": "DNG-03", "name": "Trạm SOSFlow Đà Nẵng 03", "area_code": "DA_NANG", "address": "Hải Châu", "latitude": 16.0600, "longitude": 108.2150},
+    # Fixed demo reference points. They are not claims about live government-team deployment.
+    # TRL-01 uses the public administrative address; its coordinate is the published-map
+    # centroid of Xã Trà Linh until the operator records a verified station GPS position.
+    {"code": "TRL-01", "name": "Điểm trực demo — UBND Xã Trà Linh", "area_code": "TRA_LINH", "address": "Thôn 3, Xã Trà Linh, thành phố Đà Nẵng", "latitude": 15.023565, "longitude": 108.041263},
+    {"code": "DNG-01", "name": "Điểm trực demo — PCCC & CNCH Đà Nẵng", "area_code": "DA_NANG", "address": "183 Phan Đăng Lưu, thành phố Đà Nẵng", "latitude": 16.035971, "longitude": 108.213402},
+    {"code": "DNG-02", "name": "Điểm trực demo — Bệnh viện Đà Nẵng", "area_code": "DA_NANG", "address": "124 Hải Phòng, phường Thạch Thang, thành phố Đà Nẵng", "latitude": 16.072259, "longitude": 108.216008},
 ]
 
 DEFAULT_TEAM_STATIONS = {
     "Đội Xuồng Cứu Hộ 01": "DNG-01",
-    "Đội Y Tế Cơ Động 02": "DNG-03",
-    "Đội Leo Dây 03": "DNG-02",
+    "Đội Y Tế Cơ Động 02": "DNG-02",
+    "Đội Leo Dây 03": "TRL-01",
 }
 
 
@@ -33,6 +33,12 @@ def ensure_rescue_stations(db: Session) -> dict[str, RescueStation]:
         if not station:
             station = RescueStation(**values, is_simulated=True, is_active=True)
             db.add(station)
+        elif station.is_simulated:
+            # Correct previously seeded demo coordinates on existing databases without
+            # touching any real station an operator may have entered.
+            for field, value in values.items():
+                setattr(station, field, value)
+            station.is_active = True
         stations[values["code"]] = station
     db.commit()
     for station in stations.values():
@@ -43,7 +49,7 @@ def ensure_rescue_stations(db: Session) -> dict[str, RescueStation]:
 def _station_for_team(team: RescueTeam, stations: dict[str, RescueStation]) -> RescueStation:
     latitude = team.current_latitude if team.current_latitude is not None else team.latitude
     # The two intentional map scopes are Trà Linh and Đà Nẵng only.
-    if latitude is not None and latitude > 20:
+    if latitude is not None and latitude < 15.5:
         return stations["TRL-01"]
     return stations["DNG-01"]
 
@@ -57,20 +63,22 @@ def seed_database(db: Session) -> None:
             desired_station = stations.get(DEFAULT_TEAM_STATIONS.get(team.name, ""))
             if team.station_id is None or desired_station is not None:
                 station = desired_station or _station_for_team(team, stations)
-                if team.station_id == station.id:
-                    continue
-                team.station_id = station.id
-                # Seed/demo teams have no live tracking, so base location is fixed.
-                team.latitude = station.latitude; team.longitude = station.longitude
-                team.current_latitude = station.latitude; team.current_longitude = station.longitude
-                changed = True
+                if team.station_id != station.id:
+                    team.station_id = station.id
+                    changed = True
+                # Seed/demo teams have no live tracking, so their displayed location
+                # follows their corrected fixed reference point even after a reseed.
+                for field, value in (("latitude", station.latitude), ("longitude", station.longitude), ("current_latitude", station.latitude), ("current_longitude", station.longitude)):
+                    if getattr(team, field) != value:
+                        setattr(team, field, value)
+                        changed = True
         if changed:
             db.commit()
         return
 
     teams = [
         RescueTeam(name="Đội Xuồng Cứu Hộ 01", phone_number="0901000001", member_count=6, vehicle_type="Xuồng máy", station_id=stations["DNG-01"].id, latitude=stations["DNG-01"].latitude, longitude=stations["DNG-01"].longitude, current_latitude=stations["DNG-01"].latitude, current_longitude=stations["DNG-01"].longitude, capabilities=["flood_rescue", "medical"], equipment=["xuồng cứu hộ", "áo phao", "túi sơ cứu"], max_people_capacity=12, status=TeamStatus.AVAILABLE.value),
-        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", station_id=stations["DNG-03"].id, latitude=stations["DNG-03"].latitude, longitude=stations["DNG-03"].longitude, current_latitude=stations["DNG-03"].latitude, current_longitude=stations["DNG-03"].longitude, capabilities=["medical"], equipment=["cáng", "oxy", "túi sơ cứu"], max_people_capacity=4, status=TeamStatus.BUSY.value),
+        RescueTeam(name="Đội Y Tế Cơ Động 02", phone_number="0901000002", member_count=4, vehicle_type="Xe cứu thương", station_id=stations["DNG-02"].id, latitude=stations["DNG-02"].latitude, longitude=stations["DNG-02"].longitude, current_latitude=stations["DNG-02"].latitude, current_longitude=stations["DNG-02"].longitude, capabilities=["medical"], equipment=["cáng", "oxy", "túi sơ cứu"], max_people_capacity=4, status=TeamStatus.BUSY.value),
         RescueTeam(name="Đội Leo Dây 03", phone_number="0901000003", member_count=5, vehicle_type="Xe bán tải", station_id=stations["DNG-02"].id, latitude=stations["DNG-02"].latitude, longitude=stations["DNG-02"].longitude, current_latitude=stations["DNG-02"].latitude, current_longitude=stations["DNG-02"].longitude, capabilities=["landslide"], equipment=["dây thừng", "mũ bảo hộ"], max_people_capacity=5, status=TeamStatus.OFFLINE.value),
     ]
     db.add_all(teams)

@@ -43,7 +43,7 @@ def test_offline_sync_idempotency_keeps_original_time_and_server_sync_time(db):
 
 
 def test_silent_zone_is_only_verification_signal_and_has_audit(db):
-    zone = SilentZone(name="Vùng thử", latitude=22.5, longitude=104.4, radius_meters=1_000, hazard_active=True, last_report_at=utc_now() - timedelta(minutes=35), silence_threshold_minutes=20)
+    zone = SilentZone(name="Vùng thử", latitude=15.02, longitude=108.04, radius_meters=1_000, hazard_active=True, last_report_at=utc_now() - timedelta(minutes=35), silence_threshold_minutes=20)
     db.add(zone); db.commit()
 
     alert = list_silent_zones(db, only_alerts=True)
@@ -64,4 +64,4 @@ def test_tra_linh_scenario_inject_all_creates_real_reports_missions_and_silent_z
     assert len(result["injected"]) == 12
     assert db.query(RescueRequest).filter(RescueRequest.source == IntakeSource.OFFLINE_SYNC.value).count() == 1
     zones = list_silent_zones(db, only_alerts=True)
-    assert zones and zones[0]["name"] == "Khe Nậm Chảy"
+    assert zones and zones[0]["name"] == "Khu vực cần xác minh Trà Linh"

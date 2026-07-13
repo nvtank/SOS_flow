@@ -202,7 +202,7 @@ DEMO_MODE=true DEMO_TOKEN=sosflow-demo docker compose up --build
 python3 scripts/simulate_disaster.py --token sosflow-demo
 ```
 
-Script bơm 12 report qua API thật, trong đó có 112/SMS/cán bộ/offline sync và ba report cùng khu vực cầu Trà Linh. Demo endpoint chỉ được mount khi `DEMO_MODE=true` và cần header `X-Demo-Token`. Điểm `///slipped.awkward.scarecrow` được giữ như một liên kết What3words trong report demo để mở trực tiếp từ popup; không tự suy diễn tọa độ khi chưa có API key What3words.
+Script bơm 12 report qua API thật, trong đó có 112/SMS/cán bộ/offline sync và ba report cùng khu vực Thôn 3, Xã Trà Linh, thành phố Đà Nẵng. Demo endpoint chỉ được mount khi `DEMO_MODE=true` và cần header `X-Demo-Token`. Điểm `///slipped.awkward.scarecrow` được giữ như một liên kết What3words trong report demo để mở trực tiếp từ popup; không tự suy diễn tọa độ khi chưa có API key What3words.
 
 ### Command Center Dashboard
 
