@@ -16,6 +16,17 @@
 
 `GET /api/rescue-requests/{request_code}/status`
 
+Response mẫu:
+
+```json
+{
+  "request_code": "SOS-0001",
+  "status": "PENDING_VERIFICATION",
+  "priority_level": "CRITICAL",
+  "priority_score": 82
+}
+```
+
 ## Command Center
 
 - `GET /api/admin/rescue-requests`
