@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrainCircuit, ClipboardList, CloudOff, RefreshCw, Send, Trash2, Wifi, WifiOff } from "lucide-react";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { OfflineReport, makeOfflineReport, offlineQueue, syncQueuedReports } from "../offlineQueue";
 import { useI18n } from "../i18n";
 
@@ -61,28 +61,34 @@ export function ReportPage() {
     event.preventDefault(); setLoading(true); setError(""); setNotice("");
     const formElement = event.currentTarget;
     const body = payloadFromForm(new FormData(formElement), intakeMode);
+    // Reuse this key if the server accepts the report but the response is lost.
+    // The backend then returns the original record instead of creating another.
+    const clientSubmissionId = crypto.randomUUID();
     try {
       if (!navigator.onLine) {
-        const local = makeOfflineReport(body); await offlineQueue.put(local); await refreshQueue();
+        const local = makeOfflineReport(body, clientSubmissionId); await offlineQueue.put(local); await refreshQueue();
         formElement.reset();
         setNotice(t("report.savedLocal").replace("{id}", local.local_id));
         return;
       }
-      const clientSubmissionId = crypto.randomUUID();
       const created = await api.createRequest({ ...body, client_submission_id: clientSubmissionId, source: "WEB" });
       navigate("/report/success", { state: created });
     } catch (err) {
-      const local = makeOfflineReport(body); await offlineQueue.put(local); await refreshQueue();
       const detail = err instanceof Error ? err.message : t("report.sendFailed");
+      // A 4xx means the user must correct the form; retrying the same invalid
+      // payload forever would mislead them. Network and 5xx failures are safe
+      // to queue with the original idempotency key.
+      if (err instanceof ApiError && err.status < 500) { setError(detail); return; }
+      const local = makeOfflineReport(body, clientSubmissionId); await offlineQueue.put(local); await refreshQueue();
       setError(`${detail}. ${t("report.queuedAfterFailure").replace("{id}", local.local_id)}`);
     } finally { setLoading(false); }
   }
 
-  return <section className="mx-auto max-w-5xl space-y-0">
+  return <section className="report-page mx-auto max-w-5xl space-y-0">
     <div className="apple-hero"><div className="flex flex-wrap items-center justify-center gap-3"><h1>{t("report.title")}</h1><div className="inline-flex items-center gap-2 rounded-full border border-white/30 px-3 py-2 text-sm text-white">{online ? <Wifi size={16} /> : <WifiOff size={16} />}{online ? t("form.online") : t("form.offline")}</div></div><p>{t("report.dualSubtitle")}</p></div>
     {!online && <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><CloudOff className="mr-2 inline" size={16} />{t("report.offlineNotice")}</div>}
 
-    <div className="grid gap-3 bg-[#f5f5f7] p-5 md:grid-cols-2">
+    <div className="report-mode-grid grid gap-3 bg-[#f5f5f7] p-5 md:grid-cols-2">
       <button type="button" onClick={() => setIntakeMode("NATURAL_LANGUAGE")} className={`rounded-[18px] border p-5 text-left transition ${intakeMode === "NATURAL_LANGUAGE" ? "border-[#0066cc] bg-white ring-2 ring-[#0066cc]/20" : "border-[#e0e0e0] bg-white/70"}`}>
         <BrainCircuit className="mb-3 text-[#0066cc]" size={28} /><strong className="block text-lg">{t("report.naturalTitle")}</strong><span className="mt-1 block text-sm text-slate-600">{t("report.naturalBody")}</span><span className="mt-3 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">Amazon Bedrock</span>
       </button>

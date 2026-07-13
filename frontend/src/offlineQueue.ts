@@ -33,8 +33,8 @@ async function transact<T>(mode: IDBTransactionMode, action: (store: IDBObjectSt
   }).finally(() => db.close());
 }
 
-export function makeOfflineReport(formData: Record<string, unknown>): OfflineReport {
-  const id = crypto.randomUUID();
+export function makeOfflineReport(formData: Record<string, unknown>, submissionId = crypto.randomUUID()): OfflineReport {
+  const id = submissionId;
   return { local_id: `LOCAL-${id.slice(0, 8).toUpperCase()}`, client_submission_id: id, form_data: formData, created_at_local: new Date().toISOString(), sync_status: "QUEUED", retry_count: 0 };
 }
 

@@ -442,7 +442,8 @@ class EmergencyPrioritizer:
             return None
 
         invoke_target = (
-            os.getenv("BEDROCK_INFERENCE_PROFILE_ID")
+            os.getenv("BEDROCK_INFERENCE_PROFILE_ARN")
+            or os.getenv("BEDROCK_INFERENCE_PROFILE_ID")
             or os.getenv("BEDROCK_MODEL_ID", "")
         )
         if not invoke_target:

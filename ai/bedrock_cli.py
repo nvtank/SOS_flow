@@ -1,11 +1,10 @@
 """
 Interactive CLI de test he thong AI voi Bedrock that.
 
-Cach dung:
-    cd backend
-    python -m app.ai.bedrock_cli                # mac dinh mode=bedrock
-    python -m app.ai.bedrock_cli --mode hybrid   # dung hybrid (rule + LLM)
-    python -m app.ai.bedrock_cli --mode mock      # dung mock (chi rule-based)
+Cach dung (tu repository root):
+    python -m ai.bedrock_cli                # mac dinh mode=bedrock
+    python -m ai.bedrock_cli --mode hybrid   # dung hybrid (rule + LLM)
+    python -m ai.bedrock_cli --mode mock      # dung mock (chi rule-based)
 
 Trong terminal:
     - Nhap cau bao cao khan cap -> nhan ket qua phan tich JSON
@@ -28,7 +27,7 @@ from dotenv import load_dotenv
 # ---------------------------------------------------------------------------
 # Setup paths
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -44,9 +43,9 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-from app.ai.analyzer import AIAnalyzerFactory
-from app.ai.prioritizer import EmergencyPrioritizer, extract_coordinates
-from app.ai.schemas import AIAnalysis, PriorityReport
+from .analyzer import AIAnalyzerFactory
+from .prioritizer import EmergencyPrioritizer, extract_coordinates
+from .schemas import AIAnalysis, PriorityReport
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +354,7 @@ async def interactive_loop(mode: str) -> None:
             continue
 
         if cmd == "stations":
-            from app.ai.prioritizer import DEFAULT_RESCUE_STATIONS
+            from .prioritizer import DEFAULT_RESCUE_STATIONS
             print(f"\n{C.CYAN}  Tram cuu ho:{C.RESET}")
             for s in DEFAULT_RESCUE_STATIONS:
                 print(f"    [{s.station_type:>7}] {s.name}  ({s.latitude}, {s.longitude})")
@@ -388,7 +387,7 @@ def main() -> int:
     parser.add_argument(
         "--mode", "-m",
         choices=["bedrock", "hybrid", "mock"],
-        default=os.getenv("SOSFLOW_AI_MODE", "bedrock"),
+        default=os.getenv("AI_PROVIDER", os.getenv("SOSFLOW_AI_MODE", "bedrock")),
         help="AI mode (default: bedrock)",
     )
     args = parser.parse_args()

@@ -1,0 +1,40 @@
+{"message":"Khẩn cấp tại Thôn 3, Xã Trà Linh: 6 người mắc kẹt, nước cuốn mạnh.","risks":["trapped","high_water"],"missing":[],"extraction":{"number_of_people":6,"is_trapped":true}}
+{"message":"Có người bị thương và không thở được, chưa rõ đang ở đâu.","risks":["injury"],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"4 trẻ em đang chờ cứu tại Xã Trà Linh.","risks":["children"],"missing":["number_of_people"],"extraction":{}}
+{"message":"Nhà có 3 người mắc kẹt, nước đang lên rất nhanh tại Thôn 2.","risks":["trapped","high_water"],"missing":[],"extraction":{"number_of_people":3,"is_trapped":true}}
+{"message":"2 người bị thương ở đường Trần Đại Nghĩa, cần y tế ngay.","risks":["injury"],"missing":[],"extraction":{"number_of_people":2}}
+{"message":"cuu voi nha e ngap gan noc co 5 nguoi o thon 3 tra linh","risks":["high_water"],"missing":[],"extraction":{"number_of_people":5}}
+{"message":"Nước dâng 1,8 mét, 2 người không ra được khỏi nhà ở Xã Trà Linh.","risks":["trapped","high_water"],"missing":[],"extraction":{"number_of_people":2,"water_level":1.8,"is_trapped":true}}
+{"message":"Tôi ở cùng mẹ già, nước lên cao nhưng chưa biết địa chỉ chính xác.","risks":["high_water"],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"Sạt lở phía sau nhà, 4 người cần sơ tán ở Thôn 1.","risks":["landslide"],"missing":[],"extraction":{"number_of_people":4}}
+{"message":"Có 1 người bất tỉnh tại đường Lê Duẩn.","risks":["injury"],"missing":[],"extraction":{"number_of_people":1}}
+{"message":"Chúng tôi tạm thời an toàn và chỉ cần nước uống.","risks":[],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"SOS SOS, không thể nói rõ có bao nhiêu người.","risks":[],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"7 người đang bị kẹt trong trường học tại Xã Trà Linh.","risks":["trapped"],"missing":[],"extraction":{"number_of_people":7,"is_trapped":true}}
+{"message":"Nước cuốn rất mạnh tại Cầu Trà Linh, chưa xác định số người.","risks":["high_water"],"missing":["number_of_people"],"extraction":{}}
+{"message":"3 nguoi mac ket o thon 3, nuoc dang len nhanh","risks":["trapped","high_water"],"missing":[],"extraction":{"number_of_people":3,"is_trapped":true}}
+{"message":"Có 2 người, một người chảy máu nhiều ở Phường Hòa Hải.","risks":["injury"],"missing":[],"extraction":{"number_of_people":2}}
+{"message":"Một phụ nữ mang thai cần hỗ trợ, vị trí chưa xác định.","risks":["pregnant_person"],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"Có người khuyết tật mắc kẹt trong nhà tại Thôn 4.","risks":["disabled_person","trapped"],"missing":["number_of_people"],"extraction":{"is_trapped":true}}
+{"message":"9 người ở khu tránh trú an toàn, không có ai bị thương.","risks":[],"missing":["exact_location"],"extraction":{"number_of_people":9}}
+{"message":"Nhà sắp đổ do sạt lở, có 2 người ở Xã Trà Linh.","risks":["landslide"],"missing":[],"extraction":{"number_of_people":2}}
+{"message":"5 người mắc kẹt, 2 trẻ em, 1 người bị thương tại Thôn 3.","risks":["trapped","children","injury"],"missing":[],"extraction":{"number_of_people":5,"is_trapped":true}}
+{"message":"Nước ngập 80 cm ở nhà văn hóa, có 6 người cần hỗ trợ.","risks":["high_water"],"missing":[],"extraction":{"number_of_people":6}}
+{"message":"nha tui co 4 nguoi, nc len nhanh, o xa tra linh","risks":["high_water"],"missing":[],"extraction":{"number_of_people":4}}
+{"message":"Cần thức ăn cho 3 người tại Thôn 2, hiện không nguy hiểm.","risks":[],"missing":[],"extraction":{"number_of_people":3}}
+{"message":"Có tiếng kêu cứu nhưng không rõ vị trí và số nạn nhân.","risks":[],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"2 người già bị kẹt trong nhà, nước dâng tại Xã Trà Linh.","risks":["elderly","trapped","high_water"],"missing":[],"extraction":{"number_of_people":2,"is_trapped":true}}
+{"message":"Một em bé bị thương ở đường Nguyễn Văn Linh.","risks":["children","injury"],"missing":["number_of_people"],"extraction":{}}
+{"message":"Có 8 người trên mái nhà vì nước ngập nóc tại Thôn 3.","risks":["high_water","trapped"],"missing":[],"extraction":{"number_of_people":8}}
+{"message":"Điện đã mất, 2 người cần đèn pin tại Xã Trà Linh.","risks":[],"missing":[],"extraction":{"number_of_people":2}}
+{"message":"Lũ đã rút, gia đình an toàn, đây chỉ là tin cập nhật.","risks":[],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"1 người không thở được, đang ở Cầu Rồng Đà Nẵng.","risks":["injury"],"missing":[],"extraction":{"number_of_people":1}}
+{"message":"10 người mắc kẹt trên tầng hai, nước cao 2 mét tại Thôn 2.","risks":["trapped","high_water"],"missing":[],"extraction":{"number_of_people":10,"water_level":2.0,"is_trapped":true}}
+{"message":"Toi khong biet minh dang o dau, xin cuu gap.","risks":[],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"Có 3 người cần thuốc tại phường Thạch Thang.","risks":[],"missing":[],"extraction":{"number_of_people":3}}
+{"message":"Đường bị chia cắt, 5 người không ra được tại Xã Trà Linh.","risks":["trapped"],"missing":[],"extraction":{"number_of_people":5,"is_trapped":true}}
+{"message":"Cứu, cứu, nước cuốn, điện thoại sắp hết pin.","risks":["high_water"],"missing":["exact_location","number_of_people"],"extraction":{}}
+{"message":"4 người, trong đó có trẻ em, đang ở Thôn 3 và cần xuồng.","risks":["children"],"missing":[],"extraction":{"number_of_people":4}}
+{"message":"Có 2 người bị thương do mái tôn, địa chỉ đường Hải Phòng.","risks":["injury"],"missing":[],"extraction":{"number_of_people":2}}
+{"message":"Tin mạng xã hội chưa kiểm chứng: có người mắc kẹt gần chợ.","risks":["trapped"],"missing":["exact_location","number_of_people"],"extraction":{"is_trapped":true}}
+{"message":"Cán bộ xã xác nhận 12 người cần sơ tán tại Thôn 1, nước đang lên.","risks":["high_water"],"missing":[],"extraction":{"number_of_people":12}}

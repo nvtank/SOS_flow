@@ -30,7 +30,10 @@ def main() -> None:
     os.environ["AI_PROVIDER"] = args.provider
     get_settings.cache_clear(); settings = get_settings()
     rows = [json.loads(line) for line in Path(args.dataset).read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not rows:
+        raise SystemExit("Evaluation dataset is empty")
     valid = fallback = 0; risk_tp = risk_fp = risk_fn = missing_tp = missing_fp = missing_fn = 0; latencies = []
+    extraction_correct = extraction_total = 0
     for row in rows:
         started = time.perf_counter()
         try:
@@ -38,11 +41,15 @@ def main() -> None:
             EmergencyAnalysis.model_validate(analysis); valid += 1; fallback += int(bool(metadata["fallback_used"])); latencies.append(metadata["latency_ms"])
             tp, fp, fn = score_sets(set(row["risks"]), set(analysis["detected_risks"])); risk_tp += tp; risk_fp += fp; risk_fn += fn
             tp, fp, fn = score_sets(set(row["missing"]), set(analysis["missing_information"])); missing_tp += tp; missing_fp += fp; missing_fn += fn
+            for field, expected in row.get("extraction", {}).items():
+                extraction_total += 1
+                actual = analysis.get(field)
+                extraction_correct += int(abs(actual - expected) < 0.01 if isinstance(expected, float) and isinstance(actual, (int, float)) else actual == expected)
         except Exception:
             latencies.append(round((time.perf_counter() - started) * 1000, 1))
     precision = lambda tp, fp: round(tp / (tp + fp), 3) if tp + fp else 0.0
     recall = lambda tp, fn: round(tp / (tp + fn), 3) if tp + fn else 0.0
-    print(json.dumps({"provider": args.provider, "records": len(rows), "json_validity": round(valid / len(rows), 3), "risk_precision": precision(risk_tp, risk_fp), "risk_recall": recall(risk_tp, risk_fn), "missing_precision": precision(missing_tp, missing_fp), "missing_recall": recall(missing_tp, missing_fn), "average_latency_ms": round(sum(latencies) / len(latencies), 1), "fallback_rate": round(fallback / len(rows), 3), "estimated_invocation_count": len(rows)}, ensure_ascii=False, indent=2))
+    print(json.dumps({"provider": args.provider, "records": len(rows), "json_validity": round(valid / len(rows), 3), "field_extraction_accuracy": round(extraction_correct / extraction_total, 3) if extraction_total else None, "labeled_extraction_fields": extraction_total, "risk_precision": precision(risk_tp, risk_fp), "risk_recall": recall(risk_tp, risk_fn), "missing_precision": precision(missing_tp, missing_fp), "missing_recall": recall(missing_tp, missing_fn), "average_latency_ms": round(sum(latencies) / len(latencies), 1), "fallback_rate": round(fallback / len(rows), 3), "estimated_invocation_count": len(rows)}, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

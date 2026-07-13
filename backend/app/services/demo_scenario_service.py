@@ -3,13 +3,14 @@
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.time import utc_now
-from app.models.entities import DemoScenarioState, MissionStatus, RequestStatus, RescueRequest, RescueStation, RescueTeam, SilentZone, SilentZoneHistory, TeamStatus
+from app.models.entities import DemoScenarioState, DuplicateCandidate, MissionStatus, RequestStatus, RescueMission, RescueRequest, RescueStation, RescueTeam, SilentZone, SilentZoneHistory, TeamStatus
 from app.schemas.rescue import RescueRequestCreate
 from app.services.intake_service import intake_rescue_request
+from app.services.duplicate_service import recalculate_duplicate_state
 from app.services.rescue_service import assign_request, transition_request, update_mission_status
 
 
@@ -39,7 +40,7 @@ REPORT_EVENTS = [
 def _state(db: Session) -> DemoScenarioState:
     state = db.scalar(select(DemoScenarioState).where(DemoScenarioState.scenario_key == SCENARIO_KEY))
     if not state:
-        state = DemoScenarioState(scenario_key=SCENARIO_KEY)
+        state = DemoScenarioState(scenario_key=SCENARIO_KEY, paused=True)
         db.add(state); db.commit(); db.refresh(state)
     return state
 
@@ -112,14 +113,40 @@ def _inject_event(db: Session, index: int) -> tuple[str, list[int]]:
 
 def reset_scenario(db: Session) -> dict:
     """Delete only simulator-owned records and deterministic demo support data."""
-    for request in db.scalars(select(RescueRequest).where(RescueRequest.is_simulated.is_(True))).all():
+    simulated_requests = db.scalars(select(RescueRequest).where(RescueRequest.is_simulated.is_(True))).all()
+    simulated_ids = {request.id for request in simulated_requests}
+    affected_real_ids: set[int] = set()
+    if simulated_ids:
+        candidates = db.scalars(
+            select(DuplicateCandidate).where(
+                (DuplicateCandidate.request_id.in_(simulated_ids))
+                | (DuplicateCandidate.candidate_request_id.in_(simulated_ids))
+            )
+        ).all()
+        for candidate in candidates:
+            if candidate.request_id not in simulated_ids:
+                affected_real_ids.add(candidate.request_id)
+            if candidate.candidate_request_id not in simulated_ids:
+                affected_real_ids.add(candidate.candidate_request_id)
+    for request in simulated_requests:
         db.delete(request)
     for zone in db.scalars(select(SilentZone).where(SilentZone.scenario_key == SCENARIO_KEY)).all():
         db.delete(zone)
     db.flush()
+    # Simulator candidates may have marked a real report as POSSIBLE.  Reset
+    # must not leave that production-owned report with a stale warning.
+    for request_id in affected_real_ids:
+        request = db.get(RescueRequest, request_id)
+        if request:
+            recalculate_duplicate_state(db, request)
     for team in db.scalars(select(RescueTeam).where(RescueTeam.name.like("Demo Đội %"))).all():
-        db.delete(team)
-    state = _state(db); state.next_event = 0; state.paused = False; state.speed = 1
+        # A coordinator may intentionally assign a simulator-created team to a
+        # real report during the live demo.  Keep that team when mission audit
+        # rows still reference it; deleting it would null a NOT NULL FK.
+        mission_count = db.scalar(select(func.count(RescueMission.id)).where(RescueMission.team_id == team.id)) or 0
+        if mission_count == 0:
+            db.delete(team)
+    state = _state(db); state.next_event = 0; state.paused = True; state.speed = 1
     db.commit()
     return scenario_status(db)
 
@@ -130,7 +157,7 @@ def start_scenario(db: Session, speed: int = 1) -> dict:
     # own teams, so Request Detail can demonstrate a top-three recommendation.
     _scenario_team(db, "Demo Đội Dự bị Trà Linh A", ["flood_rescue", "medical"])
     _scenario_team(db, "Demo Đội Dự bị Trà Linh B", ["flood_rescue"])
-    state = _state(db); state.speed = speed; db.commit()
+    state = _state(db); state.speed = speed; state.paused = False; db.commit()
     return scenario_status(db)
 
 
@@ -144,23 +171,30 @@ def pause_scenario(db: Session, paused: bool) -> dict:
     return scenario_status(db)
 
 
+def set_scenario_speed(db: Session, speed: int) -> dict:
+    """Change playback speed without resetting or reinjecting the scenario."""
+    state = _state(db); state.speed = speed; db.commit()
+    return scenario_status(db)
+
+
 def inject_next(db: Session) -> dict:
     state = _state(db)
-    if state.paused:
-        raise HTTPException(status_code=409, detail="Scenario is paused")
     label, request_ids = _inject_event(db, state.next_event)
-    state.next_event += 1; db.commit()
+    state.next_event += 1
+    if state.next_event >= len(REPORT_EVENTS) + 3:
+        state.paused = True
+    db.commit()
     return {**scenario_status(db), "event": label, "request_ids": request_ids}
 
 
 def inject_all(db: Session) -> dict:
     state = _state(db)
-    if state.paused:
-        raise HTTPException(status_code=409, detail="Scenario is paused")
     injected = []
     while state.next_event < len(REPORT_EVENTS) + 3:
         label, request_ids = _inject_event(db, state.next_event)
         state.next_event += 1
         injected.append({"event": label, "request_ids": request_ids})
         db.commit()
+    state.paused = True
+    db.commit()
     return {**scenario_status(db), "injected": injected}

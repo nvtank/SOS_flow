@@ -1,0 +1,2 @@
+{"message":"3 người không ra được khỏi nhà ở Xã Trà Linh.","analysis":{"number_of_people":3,"is_trapped":true,"detected_risks":["trapped"]}}
+{"message":"Xin cứu, tôi không biết vị trí hiện tại.","analysis":{"missing_information":["exact_location","number_of_people"]}}

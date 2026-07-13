@@ -146,8 +146,8 @@ def decide_duplicate(db: Session, request_id: int, candidate_id: int, confirmed:
         candidate.candidate_request.duplicate_state = DuplicateState.CONFIRMED_DUPLICATE.value
         audit_note = f"Duplicate candidate #{candidate.id} confirmed" + (f": {note}" if note else "")
     else:
-        _recalculate_duplicate_state(db, candidate.request)
-        _recalculate_duplicate_state(db, candidate.candidate_request)
+        recalculate_duplicate_state(db, candidate.request)
+        recalculate_duplicate_state(db, candidate.candidate_request)
         audit_note = f"Duplicate candidate #{candidate.id} rejected" + (f": {note}" if note else "")
     _record_duplicate_audit(db, candidate.request, audit_note)
     db.commit()
@@ -155,7 +155,7 @@ def decide_duplicate(db: Session, request_id: int, candidate_id: int, confirmed:
     return candidate
 
 
-def _recalculate_duplicate_state(db: Session, request: RescueRequest) -> None:
+def recalculate_duplicate_state(db: Session, request: RescueRequest) -> None:
     has_confirmed = db.scalar(
         select(DuplicateCandidate.id).where(
             or_(DuplicateCandidate.request_id == request.id, DuplicateCandidate.candidate_request_id == request.id),

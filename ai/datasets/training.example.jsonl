@@ -1,0 +1,2 @@
+{"message":"Có 5 người mắc kẹt tại Thôn 3, nước dâng 2 mét.","analysis":{"number_of_people":5,"is_trapped":true,"water_level":2.0,"detected_risks":["trapped","high_water"]}}
+{"message":"Một người bị thương tại đường Trần Đại Nghĩa.","analysis":{"number_of_injured":1,"detected_risks":["injury"],"missing_information":["number_of_people"]}}

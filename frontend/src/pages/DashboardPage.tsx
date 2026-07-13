@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Clock3, MapPin, RefreshCw, ShieldCheck, Users, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, DemoScenarioState, RescueRequest, RescueStation, RescueTeam, SilentZone, Statistics } from "../api/client";
@@ -23,6 +23,8 @@ export function DashboardPage() {
   const [mapArea, setMapArea] = useState<MapArea>(isDemo ? "TRA_LINH" : "DA_NANG");
   const [scenario, setScenario] = useState<DemoScenarioState>();
   const [demoMessage, setDemoMessage] = useState("");
+  const [demoBusy, setDemoBusy] = useState(false);
+  const demoInFlight = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -48,15 +50,45 @@ export function DashboardPage() {
   }, [load]);
   useEffect(() => { if (isDemo) api.demoStatus(demoToken).then(setScenario).catch(() => undefined); }, []);
 
-  async function control(action: "start" | "pause" | "next" | "all" | "reset", speed = 1) {
+  // Playback stays in the browser on purpose: every event still enters through
+  // the protected API, while pause/unmount cancels the next scheduled call.
+  useEffect(() => {
+    if (!isDemo || !scenario || scenario.paused || scenario.complete) return undefined;
+    const timer = window.setTimeout(async () => {
+      if (demoInFlight.current) return;
+      demoInFlight.current = true;
+      setDemoBusy(true);
+      try {
+        const result = await api.demoNext(demoToken);
+        setScenario(result);
+        setDemoMessage(result.event ?? t("dashboard.demoTitle"));
+        await load();
+      } catch (cause) {
+        setDemoMessage(cause instanceof Error ? cause.message : "Demo playback failed.");
+        const latest = await api.demoStatus(demoToken).catch(() => undefined);
+        if (latest) setScenario(latest);
+      } finally {
+        demoInFlight.current = false;
+        setDemoBusy(false);
+      }
+    }, Math.max(750, 4_000 / scenario.speed));
+    return () => window.clearTimeout(timer);
+  }, [load, scenario, t]);
+
+  async function control(action: "start" | "pause" | "speed" | "next" | "all" | "reset", speed = 1) {
+    if (demoInFlight.current) return;
+    demoInFlight.current = true;
+    setDemoBusy(true);
     try {
       const result = action === "start" ? await api.demoStart(demoToken, speed)
         : action === "pause" ? await api.demoPause(demoToken, !scenario?.paused)
+        : action === "speed" ? await api.demoSpeed(demoToken, speed)
         : action === "next" ? await api.demoNext(demoToken)
         : action === "all" ? await api.demoAll(demoToken)
         : await api.demoReset(demoToken);
       setScenario(result); setDemoMessage(result.event ? result.event : t("dashboard.demoTitle")); await load();
     } catch (cause) { setDemoMessage(cause instanceof Error ? cause.message : "Demo control failed."); }
+    finally { demoInFlight.current = false; setDemoBusy(false); }
   }
 
   const missingLocation = useMemo(() => requests.filter((item) => item.latitude == null || item.longitude == null), [requests]);
@@ -79,8 +111,8 @@ export function DashboardPage() {
     {error && <div className="inline-alert inline-alert--error"><AlertTriangle size={18} />{error}</div>}
 
     {isDemo && <section className="demo-control">
-      <div className="demo-control__copy"><span className="demo-pulse"><i /> DEMO MODE</span><h2>{t("dashboard.demoTitle")}</h2><p>{scenario ? `${scenario.next_event}/${scenario.total_events} events · x${scenario.speed} · ${scenario.paused ? "Paused" : "Running"}` : t("common.loading")}</p></div>
-      <div className="demo-control__actions"><button className="primary-button" onClick={() => void control("start", 1)}>{t("dashboard.demoStart")}</button><button onClick={() => void control("start", 2)}>x2</button><button onClick={() => void control("start", 5)}>x5</button><button onClick={() => void control("pause")}>{scenario?.paused ? "Resume" : "Pause"}</button><button onClick={() => void control("next")}>{t("dashboard.next")}</button><button onClick={() => void control("all")}>{t("dashboard.injectAll")}</button><button onClick={() => void control("reset")}>{t("dashboard.reset")}</button></div>
+      <div className="demo-control__copy"><span className="demo-pulse"><i /> DEMO MODE</span><h2>{t("dashboard.demoTitle")}</h2><p>{scenario ? `${scenario.next_event}/${scenario.total_events} events · x${scenario.speed} · ${scenario.complete ? "Complete" : scenario.paused ? "Paused" : "Running"}` : t("common.loading")}</p></div>
+      <div className="demo-control__actions"><button disabled={demoBusy} className="primary-button" onClick={() => void control("start", 1)}>{demoBusy ? "…" : t("dashboard.demoStart")}</button>{[1, 2, 5].map((speed) => <button disabled={demoBusy || !scenario} aria-pressed={scenario?.speed === speed} className={scenario?.speed === speed ? "active" : ""} key={speed} onClick={() => void control("speed", speed)}>x{speed}</button>)}<button disabled={demoBusy || !scenario || scenario.complete} onClick={() => void control("pause")}>{scenario?.paused ? "Resume" : "Pause"}</button><button disabled={demoBusy || !scenario || scenario.complete} onClick={() => void control("next")}>{t("dashboard.next")}</button><button disabled={demoBusy || !scenario || scenario.complete} onClick={() => void control("all")}>{t("dashboard.injectAll")}</button><button disabled={demoBusy} onClick={() => void control("reset")}>{t("dashboard.reset")}</button></div>
       {demoMessage && <div className="demo-message">{demoMessage}</div>}
     </section>}
 

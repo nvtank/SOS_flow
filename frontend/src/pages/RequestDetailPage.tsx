@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api, DuplicateCandidate, RescueRequest, RescueStation, RescueTeam, StatusHistory, TeamRecommendation } from "../api/client";
+import { api, DuplicateCandidate, DuplicateSummary, RescueRequest, RescueStation, RescueTeam, StatusHistory, TeamRecommendation } from "../api/client";
 import { DuplicateBadge, PriorityBadge, SourceBadge, StatusBadge } from "../components/Badges";
 import { RequestMap } from "../components/RequestMap";
 import { useI18n } from "../i18n";
@@ -15,20 +15,22 @@ export function RequestDetailPage() {
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const [candidates, setCandidates] = useState<DuplicateCandidate[]>([]);
+  const [duplicateSummary, setDuplicateSummary] = useState<DuplicateSummary>();
   const [timeline, setTimeline] = useState<StatusHistory[]>([]);
   const [showTechnical, setShowTechnical] = useState(false);
   const [recommendations, setRecommendations] = useState<TeamRecommendation[]>([]);
   const [actionError, setActionError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [editingFacts, setEditingFacts] = useState(false);
   const isDemo = import.meta.env.VITE_DEMO_MODE === "true";
 
   const refresh = useCallback(async () => {
     try {
       setActionError("");
-      const [loadedRequest, loadedTeams, loadedStations, loadedCandidates, loadedTimeline, loadedRecommendations] = await Promise.all([
-        api.getRequest(id), api.getTeams(), api.getRescueStations(), api.getDuplicates(Number(id)), api.getTimeline(Number(id)), api.getTeamRecommendations(Number(id)),
+      const [loadedRequest, loadedTeams, loadedStations, loadedCandidates, loadedDuplicateSummary, loadedTimeline, loadedRecommendations] = await Promise.all([
+        api.getRequest(id), api.getTeams(), api.getRescueStations(), api.getDuplicates(Number(id)), api.getDuplicateSummary(Number(id)), api.getTimeline(Number(id)), api.getTeamRecommendations(Number(id)),
       ]);
-      setRequest(loadedRequest); setTeams(loadedTeams); setStations(loadedStations); setCandidates(loadedCandidates); setTimeline(loadedTimeline); setRecommendations(loadedRecommendations);
+      setRequest(loadedRequest); setTeams(loadedTeams); setStations(loadedStations); setCandidates(loadedCandidates); setDuplicateSummary(loadedDuplicateSummary); setTimeline(loadedTimeline); setRecommendations(loadedRecommendations);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Không thể tải chi tiết yêu cầu.");
     }
@@ -80,6 +82,15 @@ export function RequestDetailPage() {
     await runAction(async () => { await api.reanalyze(request.id); await refresh(); setMessage("Đã tạo preview AI mới; dữ liệu người báo không bị thay đổi."); });
   }
 
+  async function saveFacts(values: Record<string, unknown>) {
+    if (!request) return;
+    await runAction(async () => {
+      await api.updateRequest(request.id, { ...values, note: "Điều phối viên cập nhật dữ liệu đã xác minh" });
+      await refresh(); setEditingFacts(false);
+      setMessage("Đã lưu dữ liệu, chạy lại phân tích và tính lại điểm ưu tiên.");
+    });
+  }
+
   if (!request) return <div>Đang tải...</div>;
 
   return (
@@ -105,12 +116,18 @@ export function RequestDetailPage() {
           <Info label={t("detail.water")} value={request.water_level ? `${request.water_level} m` : t("detail.unknown")} />
           <Info label={t("detail.received")} value={new Date(request.received_at).toLocaleString(locale)} />
         </div>
+        <div className="border-t border-[#e0e0e0] pt-4">
+          <button className="secondary-button" onClick={() => setEditingFacts((value) => !value)}>{editingFacts ? "Đóng chỉnh sửa" : "Chỉnh dữ liệu đã xác minh"}</button>
+          {editingFacts && <VerifiedFactsForm request={request} loading={actionLoading} onCancel={() => setEditingFacts(false)} onSave={saveFacts} />}
+        </div>
         <div>
           <h2 className="mb-2 font-bold">{t("detail.priority")}: {request.priority_score}</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm">
             {request.priority_reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </div>
+        {(duplicateSummary?.merged_report_count ?? 0) > 0 && <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900"><strong>Incident chính có {duplicateSummary?.merged_report_count} báo cáo đã gộp.</strong> Báo cáo gốc vẫn được giữ để kiểm tra audit.</div>}
+        {request.canonical_request_id && <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">Báo cáo này đã gộp vào incident chính <a className="font-semibold underline" href={`/admin/requests/${request.canonical_request_id}`}>#{request.canonical_request_id}</a>; dữ liệu gốc không bị xóa.</div>}
         {candidates.length > 0 && <div className="rounded border border-amber-200 bg-amber-50 p-3">
           <h2 className="mb-2 font-bold text-amber-900">{t("detail.duplicates")}</h2>
           <div className="space-y-3">
@@ -135,6 +152,7 @@ export function RequestDetailPage() {
         <div className="apple-utility-card">
           <h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.assignment")}</h2>
           <p className="mb-3 text-sm text-slate-600">{t("detail.source")}: <strong>{request.source}</strong>{request.external_reference ? ` · ${request.external_reference}` : ""}{request.is_simulated ? " · simulator" : ""}</p>
+          {request.assigned_team && <p className="mb-3 rounded bg-sky-50 p-3 text-sm text-sky-900">Đội đang phụ trách: <strong>{request.assigned_team.name}</strong></p>}
           <div className="space-y-3">
             {request.status === "PENDING_VERIFICATION" && <button onClick={verify} disabled={actionLoading} className="primary-button disabled:opacity-50">{t("detail.verify")}</button>}
             <select className="field" value={teamId} onChange={(event) => setTeamId(event.target.value)}>
@@ -155,3 +173,35 @@ export function RequestDetailPage() {
 function Info({ label, value }: { label: string; value: string }) {
   return <div><div className="label">{label}</div><div className="font-medium">{value}</div></div>;
 }
+
+type FactsDraft = {
+  message: string; address: string; latitude: string; longitude: string; number_of_people: string;
+  number_of_children: string; number_of_elderly: string; number_of_injured: string; water_level: string;
+  has_disabled_person: boolean; has_pregnant_person: boolean; is_trapped: boolean;
+};
+
+function VerifiedFactsForm({ request, loading, onCancel, onSave }: { request: RescueRequest; loading: boolean; onCancel: () => void; onSave: (values: Record<string, unknown>) => Promise<void> }) {
+  const [draft, setDraft] = useState<FactsDraft>(() => ({
+    message: request.message, address: request.address ?? "", latitude: valueOrEmpty(request.latitude), longitude: valueOrEmpty(request.longitude),
+    number_of_people: String(request.number_of_people), number_of_children: String(request.number_of_children), number_of_elderly: String(request.number_of_elderly),
+    number_of_injured: String(request.number_of_injured), water_level: valueOrEmpty(request.water_level), has_disabled_person: request.has_disabled_person,
+    has_pregnant_person: request.has_pregnant_person, is_trapped: request.is_trapped,
+  }));
+  const textField = (field: keyof FactsDraft, label: string, type = "text") => <label className="space-y-1"><span className="label">{label}</span><input className="field" type={type} value={String(draft[field])} onChange={(event) => setDraft({ ...draft, [field]: event.target.value })} /></label>;
+  const submit = () => onSave({
+    message: draft.message, address: draft.address || null, latitude: optionalNumber(draft.latitude), longitude: optionalNumber(draft.longitude),
+    number_of_people: requiredNumber(draft.number_of_people), number_of_children: requiredNumber(draft.number_of_children), number_of_elderly: requiredNumber(draft.number_of_elderly),
+    number_of_injured: requiredNumber(draft.number_of_injured), water_level: optionalNumber(draft.water_level), has_disabled_person: draft.has_disabled_person,
+    has_pregnant_person: draft.has_pregnant_person, is_trapped: draft.is_trapped,
+  });
+  return <div className="mt-4 space-y-4 rounded border border-[#e0e0e0] bg-[#fafafc] p-4">
+    <label className="block space-y-1"><span className="label">Nội dung báo cáo</span><textarea className="field min-h-24" value={draft.message} onChange={(event) => setDraft({ ...draft, message: event.target.value })} /></label>
+    <div className="grid gap-3 md:grid-cols-2">{textField("address", "Địa chỉ")}{textField("latitude", "Vĩ độ", "number")}{textField("longitude", "Kinh độ", "number")}{textField("number_of_people", "Tổng số người", "number")}{textField("number_of_children", "Trẻ em", "number")}{textField("number_of_elderly", "Người cao tuổi", "number")}{textField("number_of_injured", "Người bị thương", "number")}{textField("water_level", "Mực nước (m)", "number")}</div>
+    <div className="flex flex-wrap gap-4 text-sm">{([['is_trapped', 'Đang mắc kẹt'], ['has_disabled_person', 'Có người khuyết tật'], ['has_pregnant_person', 'Có phụ nữ mang thai']] as const).map(([field, label]) => <label className="flex items-center gap-2" key={field}><input type="checkbox" checked={draft[field]} onChange={(event) => setDraft({ ...draft, [field]: event.target.checked })} />{label}</label>)}</div>
+    <div className="flex gap-2"><button disabled={loading || !draft.message.trim()} className="primary-button disabled:opacity-50" onClick={() => void submit()}>Lưu và tính lại priority</button><button disabled={loading} className="secondary-button" onClick={onCancel}>Hủy</button></div>
+  </div>;
+}
+
+function valueOrEmpty(value?: number) { return value == null ? "" : String(value); }
+function optionalNumber(value: string) { return value.trim() === "" ? null : Number(value); }
+function requiredNumber(value: string) { return Math.max(0, Number(value) || 0); }

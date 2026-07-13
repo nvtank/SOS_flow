@@ -1,5 +1,9 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = "ApiError"; }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -7,7 +11,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail.detail ?? `Request failed: ${response.status}`);
+    const message = typeof detail.detail === "string" ? detail.detail : `Request failed: ${response.status}`;
+    throw new ApiError(message, response.status);
   }
   return response.json();
 }
@@ -113,6 +118,9 @@ export type Mission = {
   team: RescueTeam;
 };
 
+export type MissionEvent = { id: number; mission_id: number; event_type: string; actor: string; note?: string; latitude?: number; longitude?: number; created_at: string };
+export type DuplicateSummary = { request_id: number; canonical_request_id?: number; duplicate_state: RescueRequest["duplicate_state"]; merged_report_count: number };
+
 export type Statistics = {
   total_requests: number;
   critical_requests: number;
@@ -168,6 +176,7 @@ export const api = {
   reanalyze: (id: number) => request<RescueRequest>(`/api/admin/rescue-requests/${id}/reanalyze`, { method: "POST" }),
   getTeamRecommendations: (id: number) => request<TeamRecommendation[]>(`/api/admin/rescue-requests/${id}/team-recommendations`),
   getDuplicates: (id: number) => request<DuplicateCandidate[]>(`/api/admin/rescue-requests/${id}/duplicates`),
+  getDuplicateSummary: (id: number) => request<DuplicateSummary>(`/api/admin/rescue-requests/${id}/duplicate-summary`),
   getTimeline: (id: number) => request<StatusHistory[]>(`/api/admin/rescue-requests/${id}/timeline`),
   confirmDuplicate: (id: number, candidateId: number, note?: string) => request<DuplicateCandidate>(`/api/admin/rescue-requests/${id}/duplicates/${candidateId}/confirm`, { method: "POST", body: JSON.stringify({ note }) }),
   rejectDuplicate: (id: number, candidateId: number, note?: string) => request<DuplicateCandidate>(`/api/admin/rescue-requests/${id}/duplicates/${candidateId}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
@@ -179,10 +188,12 @@ export const api = {
   getRescueStations: (areaCode?: string) => request<RescueStation[]>(`/api/rescue-stations${areaCode ? `?area_code=${encodeURIComponent(areaCode)}` : ""}`),
   assign: (id: number, teamId: number, note?: string) => request<Mission>(`/api/admin/rescue-requests/${id}/assign`, { method: "POST", body: JSON.stringify({ team_id: teamId, note }) }),
   getTeamMissions: (teamId: string) => request<Mission[]>(`/api/rescue-teams/${teamId}/missions`),
+  getMissionEvents: (missionId: number) => request<MissionEvent[]>(`/api/missions/${missionId}/events`),
   updateMission: (missionId: number, status: string, note?: string) => request<Mission>(`/api/missions/${missionId}/status`, { method: "PATCH", body: JSON.stringify({ status, note }) }),
   demoStatus: (token: string) => request<DemoScenarioState>("/api/demo/scenario", { headers: { "X-Demo-Token": token } }),
   demoStart: (token: string, speed: number) => request<DemoScenarioState>("/api/demo/scenario/start", { method: "POST", headers: { "X-Demo-Token": token }, body: JSON.stringify({ speed }) }),
   demoPause: (token: string, paused: boolean) => request<DemoScenarioState>(`/api/demo/scenario/pause?paused=${paused}`, { method: "POST", headers: { "X-Demo-Token": token } }),
+  demoSpeed: (token: string, speed: number) => request<DemoScenarioState>("/api/demo/scenario/speed", { method: "POST", headers: { "X-Demo-Token": token }, body: JSON.stringify({ speed }) }),
   demoNext: (token: string) => request<DemoScenarioState>("/api/demo/scenario/next", { method: "POST", headers: { "X-Demo-Token": token } }),
   demoAll: (token: string) => request<DemoScenarioState>("/api/demo/scenario/all", { method: "POST", headers: { "X-Demo-Token": token } }),
   demoReset: (token: string) => request<DemoScenarioState>("/api/demo/scenario/reset", { method: "POST", headers: { "X-Demo-Token": token } }),

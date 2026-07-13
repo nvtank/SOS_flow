@@ -5,7 +5,7 @@ Su dung Nominatim (OpenStreetMap) — mien phi, khong can API key.
 Rate limit: 1 request/giay (tu dong xu ly).
 
 Usage:
-    from app.ai.geocoder import geocode_address
+    from ai.geocoder import geocode_address
 
     result = await geocode_address("40 Trung Nu Vuong, Son Tra, Da Nang")
     if result:

@@ -319,6 +319,8 @@ class DemoScenarioState(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     scenario_key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     next_event: Mapped[int] = mapped_column(Integer, default=0)
-    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A fresh/reset scenario is idle.  ``start`` explicitly marks it running.
+    # This prevents a dashboard reload from unexpectedly injecting events.
+    paused: Mapped[bool] = mapped_column(Boolean, default=True)
     speed: Mapped[int] = mapped_column(Integer, default=1)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

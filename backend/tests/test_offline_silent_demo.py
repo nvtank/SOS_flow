@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.time import as_utc, utc_now
 from app.db.session import Base
-from app.models.entities import IntakeSource, RescueRequest, SilentZone, SilentZoneVerificationStatus
+from app.models.entities import DuplicateState, IntakeSource, MissionStatus, RequestStatus, RescueRequest, RescueTeam, SilentZone, SilentZoneVerificationStatus
 from app.schemas.rescue import RescueRequestCreate
 from app.services import rescue_service
-from app.services.demo_scenario_service import inject_all, start_scenario
+from app.services.demo_scenario_service import inject_all, inject_next, pause_scenario, reset_scenario, set_scenario_speed, start_scenario
 from app.services.intake_service import intake_rescue_request
 from app.services.priority_engine import PriorityEngine
 from app.services.silent_zone_service import list_silent_zones, note_report, update_verification
@@ -65,3 +65,64 @@ def test_tra_linh_scenario_inject_all_creates_real_reports_missions_and_silent_z
     assert db.query(RescueRequest).filter(RescueRequest.source == IntakeSource.OFFLINE_SYNC.value).count() == 1
     zones = list_silent_zones(db, only_alerts=True)
     assert zones and zones[0]["name"] == "Khu vực cần xác minh Trà Linh"
+
+
+def test_demo_playback_speed_does_not_reset_and_manual_step_works_while_paused(db):
+    started = start_scenario(db, speed=1)
+    assert started["paused"] is False
+    first = inject_next(db)
+    assert first["next_event"] == 1
+
+    pause_scenario(db, True)
+    changed = set_scenario_speed(db, 5)
+    assert changed["next_event"] == 1
+    assert changed["speed"] == 5
+    assert changed["paused"] is True
+
+    # "Inject next" is a manual stepping control, so it remains usable while
+    # automatic playback is paused.
+    second = inject_next(db)
+    assert second["next_event"] == 2
+    assert second["paused"] is True
+
+    reset = reset_scenario(db)
+    assert reset["next_event"] == 0
+    assert reset["paused"] is True
+
+
+def test_demo_reset_clears_stale_duplicate_warning_from_real_report(db):
+    real, _ = intake_rescue_request(
+        db,
+        RescueRequestCreate(
+            message="112 báo 6 người, có 2 trẻ em bị mắc kẹt gần Thôn 3, nước cuốn mạnh.",
+            source="WEB", address="Thôn 3, Xã Trà Linh, thành phố Đà Nẵng",
+            latitude=15.0232, longitude=108.0409, number_of_people=6,
+            number_of_children=2, is_trapped=True, water_level=2.8,
+        ),
+    )
+    start_scenario(db)
+    inject_next(db)
+    db.refresh(real)
+    assert real.duplicate_state == DuplicateState.POSSIBLE_DUPLICATE.value
+
+    reset_scenario(db)
+    db.refresh(real)
+    assert real.duplicate_state == DuplicateState.NOT_DUPLICATE.value
+
+
+def test_demo_reset_preserves_team_referenced_by_real_mission_audit(db):
+    start_scenario(db)
+    team = db.query(RescueTeam).filter(RescueTeam.name == "Demo Đội Dự bị Trà Linh A").one()
+    real, _ = intake_rescue_request(
+        db,
+        RescueRequestCreate(message="2 người mắc kẹt cần xuồng", number_of_people=2, is_trapped=True),
+    )
+    rescue_service.transition_request(db, real, RequestStatus.VERIFIED.value, "test")
+    mission = rescue_service.assign_request(db, real.id, team.id)
+    for status in (MissionStatus.ACCEPTED.value, MissionStatus.MOVING.value, MissionStatus.ARRIVED.value, MissionStatus.RESCUING.value, MissionStatus.COMPLETED.value):
+        mission = rescue_service.update_mission_status(db, mission.id, status)
+
+    reset_scenario(db)
+
+    assert db.get(RescueTeam, team.id) is not None
+    assert db.get(type(mission), mission.id).team_id == team.id

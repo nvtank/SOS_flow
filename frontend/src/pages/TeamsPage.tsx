@@ -6,9 +6,11 @@ import { useI18n } from "../i18n";
 export function TeamsPage() {
   const { t } = useI18n();
   const [teams, setTeams] = useState<RescueTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getTeams().then(setTeams);
+    api.getTeams().then(setTeams).catch((cause) => setError(cause instanceof Error ? cause.message : "Không thể tải đội cứu hộ.")).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -16,6 +18,7 @@ export function TeamsPage() {
       <div className="dashboard-header">
         <div><span className="eyebrow">SOSFLOW · FIELD UNITS</span><h1>{t("teams.title")}</h1><p>{t("teams.subtitle")}</p></div>
       </div>
+      {error && <div className="rounded border border-red-200 bg-red-50 p-4 text-red-800">{error}</div>}
       <div className="grid gap-5 md:grid-cols-3">
         {teams.map((team) => (
           <article key={team.id} className="apple-utility-card">
@@ -31,7 +34,8 @@ export function TeamsPage() {
             <Link to={`/rescue/${team.id}/missions`} className="primary-button mt-5 inline-flex">{t("teams.openMission")}</Link>
           </article>
         ))}
-        {!teams.length && <div className="apple-utility-card">{t("teams.empty")}</div>}
+        {loading && <div className="apple-utility-card">{t("common.loading")}</div>}
+        {!loading && !teams.length && !error && <div className="apple-utility-card">{t("teams.empty")}</div>}
       </div>
     </div>
   );

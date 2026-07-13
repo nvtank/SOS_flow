@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.schemas.rescue import DemoIntakeBatch, DemoScenarioControl, RescueRequestCreate, RescueRequestOut
-from app.services.demo_scenario_service import inject_all, inject_next, pause_scenario, reset_scenario, scenario_status, start_scenario
+from app.services.demo_scenario_service import inject_all, inject_next, pause_scenario, reset_scenario, scenario_status, set_scenario_speed, start_scenario
 from app.services.intake_service import intake_rescue_request
 
 
@@ -53,6 +53,11 @@ def demo_scenario_start(payload: DemoScenarioControl, db: Session = Depends(get_
 @router.post("/scenario/pause", dependencies=[Depends(require_demo_token)])
 def demo_scenario_pause(paused: bool = True, db: Session = Depends(get_db)):
     return pause_scenario(db, paused)
+
+
+@router.post("/scenario/speed", dependencies=[Depends(require_demo_token)])
+def demo_scenario_speed(payload: DemoScenarioControl, db: Session = Depends(get_db)):
+    return set_scenario_speed(db, payload.speed)
 
 
 @router.post("/scenario/next", dependencies=[Depends(require_demo_token)])

@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +13,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sosflow")
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name, version="0.1.0")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    if settings.seed_on_startup:
+        with SessionLocal() as db:
+            seed_database(db)
+    logger.info("SOSFlow API started")
+    yield
+
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,16 +40,6 @@ if settings.demo_mode:
     from app.api.demo_routes import router as demo_router
 
     app.include_router(demo_router)
-
-
-@app.on_event("startup")
-def startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    if settings.seed_on_startup:
-        with SessionLocal() as db:
-            seed_database(db)
-    logger.info("SOSFlow API started")
-
 
 @app.get("/health")
 def health() -> dict[str, str]:

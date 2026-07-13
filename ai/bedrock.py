@@ -71,11 +71,11 @@ class BedrockEmergencyAnalyzer:
 
         # Model ID — hỗ trợ cả model ID thường và inference profile ARN
         self.model_id = os.getenv("BEDROCK_MODEL_ID", "")
-        self.inference_profile_id = os.getenv("BEDROCK_INFERENCE_PROFILE_ID", "")
+        self.inference_profile_id = os.getenv("BEDROCK_INFERENCE_PROFILE_ARN") or os.getenv("BEDROCK_INFERENCE_PROFILE_ID", "")
         self.invoke_target = self.inference_profile_id or self.model_id
         if not self.invoke_target:
             raise RuntimeError(
-                "Cần set BEDROCK_MODEL_ID hoặc BEDROCK_INFERENCE_PROFILE_ID trong .env"
+                "Cần set BEDROCK_MODEL_ID hoặc BEDROCK_INFERENCE_PROFILE_ARN trong .env"
             )
 
         self.max_tokens = int(os.getenv("BEDROCK_MAX_TOKENS", "2048"))
