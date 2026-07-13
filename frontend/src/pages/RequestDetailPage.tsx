@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, DuplicateCandidate, RescueRequest, RescueStation, RescueTeam, StatusHistory, TeamRecommendation } from "../api/client";
 import { DuplicateBadge, PriorityBadge, SourceBadge, StatusBadge } from "../components/Badges";
@@ -18,55 +18,66 @@ export function RequestDetailPage() {
   const [timeline, setTimeline] = useState<StatusHistory[]>([]);
   const [showTechnical, setShowTechnical] = useState(false);
   const [recommendations, setRecommendations] = useState<TeamRecommendation[]>([]);
+  const [actionError, setActionError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
   const isDemo = import.meta.env.VITE_DEMO_MODE === "true";
 
-  useEffect(() => {
-    api.getRequest(id).then(setRequest);
-    api.getTeams().then(setTeams);
-    api.getRescueStations().then(setStations);
-    api.getDuplicates(Number(id)).then(setCandidates);
-    api.getTimeline(Number(id)).then(setTimeline);
-    api.getTeamRecommendations(Number(id)).then(setRecommendations);
+  const refresh = useCallback(async () => {
+    try {
+      setActionError("");
+      const [loadedRequest, loadedTeams, loadedStations, loadedCandidates, loadedTimeline, loadedRecommendations] = await Promise.all([
+        api.getRequest(id), api.getTeams(), api.getRescueStations(), api.getDuplicates(Number(id)), api.getTimeline(Number(id)), api.getTeamRecommendations(Number(id)),
+      ]);
+      setRequest(loadedRequest); setTeams(loadedTeams); setStations(loadedStations); setCandidates(loadedCandidates); setTimeline(loadedTimeline); setRecommendations(loadedRecommendations);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Không thể tải chi tiết yêu cầu.");
+    }
   }, [id]);
 
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function runAction(action: () => Promise<void>) {
+    try { setActionLoading(true); setActionError(""); await action(); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "Thao tác không thể hoàn tất."); }
+    finally { setActionLoading(false); }
+  }
+
   async function assign() {
-    if (!request || !teamId) return;
-    await api.assign(request.id, Number(teamId), note);
-    const updated = await api.getRequest(id);
-    setRequest(updated);
-    setMessage("Đã phân công nhiệm vụ.");
+    if (!request || !teamId) { setActionError("Chọn một đội AVAILABLE trước khi giao nhiệm vụ."); return; }
+    await runAction(async () => { await api.assign(request.id, Number(teamId), note); await refresh(); setMessage("Đã phân công nhiệm vụ."); });
   }
 
   async function decide(candidate: DuplicateCandidate, confirmed: boolean) {
     if (!request) return;
-    const updated = confirmed
-      ? await api.confirmDuplicate(request.id, candidate.id, note)
-      : await api.rejectDuplicate(request.id, candidate.id, note);
-    setCandidates((items) => items.map((item) => item.id === updated.id ? updated : item));
-    const refreshed = await api.getRequest(id);
-    setRequest(refreshed);
-    setMessage(confirmed ? "Đã xác nhận nghi vấn trùng. Có thể gộp báo cáo sau khi kiểm tra." : "Đã từ chối đề xuất trùng.");
+    await runAction(async () => {
+      const updated = confirmed
+        ? await api.confirmDuplicate(request.id, candidate.id, note)
+        : await api.rejectDuplicate(request.id, candidate.id, note);
+      setCandidates((items) => items.map((item) => item.id === updated.id ? updated : item));
+      await refresh();
+      setMessage(confirmed ? "Đã xác nhận nghi vấn trùng. Có thể gộp báo cáo sau khi kiểm tra." : "Đã từ chối đề xuất trùng.");
+    });
   }
 
   async function merge(candidate: DuplicateCandidate) {
     if (!request) return;
-    const updated = await api.mergeDuplicate(request.id, candidate.id, candidate.candidate_request_id, note);
-    setRequest(updated);
-    setMessage(`Đã giữ báo cáo gốc và gộp vào incident ${candidate.candidate_request.request_code}.`);
+    await runAction(async () => {
+      await api.mergeDuplicate(request.id, candidate.id, candidate.candidate_request_id, note);
+      await refresh();
+      setMessage(`Đã giữ báo cáo gốc và gộp vào incident ${candidate.candidate_request.request_code}.`);
+    });
   }
 
   async function verify() {
     if (!request) return;
-    const updated = await api.updateRequest(request.id, { status: "VERIFIED", note: "Đã xác minh bởi điều phối viên" });
-    setRequest(updated);
-    setMessage("Yêu cầu đã được xác minh và sẵn sàng phân công.");
+    await runAction(async () => { await api.updateRequest(request.id, { status: "VERIFIED", note: "Đã xác minh bởi điều phối viên" }); await refresh(); setMessage("Yêu cầu đã được xác minh và sẵn sàng phân công."); });
   }
 
   async function reanalyze() {
     if (!request) return;
-    const updated = await api.reanalyze(request.id);
-    setRequest(updated);
-    setMessage("Đã tạo preview AI mới; dữ liệu người báo không bị thay đổi.");
+    await runAction(async () => { await api.reanalyze(request.id); await refresh(); setMessage("Đã tạo preview AI mới; dữ liệu người báo không bị thay đổi."); });
   }
 
   if (!request) return <div>Đang tải...</div>;
@@ -115,24 +126,25 @@ export function RequestDetailPage() {
             </div>)}
           </div>
         </div>}
-        <div className="apple-tile apple-tile--paper p-6"><div className="flex items-center justify-between gap-2"><h2 className="mb-2 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.analysis")}</h2><button onClick={reanalyze} className="secondary-button">{t("detail.reanalyze")}</button></div><p className="text-sm">{request.ai_analysis.summary ?? t("detail.noSummary")}</p><div className="mt-3 grid gap-3 text-sm md:grid-cols-3"><Info label={t("detail.risks")} value={request.ai_analysis.detected_risks?.join(", ") || t("detail.none")} /><Info label={t("detail.missing")} value={request.ai_analysis.missing_information?.join(", ") || t("detail.none")} /><Info label={t("detail.confidence")} value={`${Math.round((request.ai_analysis.confidence ?? 0) * 100)}% · ${request.ai_metadata.provider ?? "mock"}${request.ai_fallback_used ? " · fallback" : ""}`} /></div><p className="mt-2 text-xs text-slate-500">Latency: {request.ai_metadata.latency_ms ?? "-"} ms {request.ai_metadata.error_code ? `· ${request.ai_metadata.error_code}` : ""}</p>{isDemo && <div className="mt-3"><button className="text-sm font-semibold text-sky-700" onClick={() => setShowTechnical(!showTechnical)}>{showTechnical ? "−" : "+"} {t("detail.raw")}</button>{showTechnical && <pre className="mt-2 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{JSON.stringify({ analysis: request.ai_analysis, metadata: request.ai_metadata }, null, 2)}</pre>}</div>}</div>
+        <div className="apple-tile apple-tile--paper p-6"><div className="flex items-center justify-between gap-2"><h2 className="mb-2 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.analysis")}</h2><button onClick={reanalyze} disabled={actionLoading} className="secondary-button disabled:opacity-50">{t("detail.reanalyze")}</button></div><p className="text-sm">{request.ai_analysis.summary ?? t("detail.noSummary")}</p><div className="mt-3 grid gap-3 text-sm md:grid-cols-3"><Info label={t("detail.risks")} value={request.ai_analysis.detected_risks?.join(", ") || t("detail.none")} /><Info label={t("detail.missing")} value={request.ai_analysis.missing_information?.join(", ") || t("detail.none")} /><Info label={t("detail.confidence")} value={`${Math.round((request.ai_analysis.confidence ?? 0) * 100)}% · ${request.ai_metadata.provider ?? "mock"}${request.ai_fallback_used ? " · fallback" : ""}`} /></div><p className="mt-2 text-xs text-slate-500">Latency: {request.ai_metadata.latency_ms ?? "-"} ms {request.ai_metadata.error_code ? `· ${request.ai_metadata.error_code}` : ""}</p>{isDemo && <div className="mt-3"><button className="text-sm font-semibold text-sky-700" onClick={() => setShowTechnical(!showTechnical)}>{showTechnical ? "−" : "+"} {t("detail.raw")}</button>{showTechnical && <pre className="mt-2 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{JSON.stringify({ analysis: request.ai_analysis, metadata: request.ai_metadata }, null, 2)}</pre>}</div>}</div>
         <div><h2 className="mb-2 font-bold">{t("detail.timeline")}</h2><ol className="space-y-2 border-l border-slate-200 pl-4 text-sm">{timeline.map((event) => <li key={event.id}><div className="font-semibold">{event.new_status} <span className="font-normal text-slate-500">· {event.changed_by}</span></div><div className="text-slate-500">{new Date(event.created_at).toLocaleString(locale)}{event.note ? ` · ${event.note}` : ""}</div></li>)}{!timeline.length && <li className="text-slate-500">{t("detail.noHistory")}</li>}</ol></div>
       </section>
       <aside className="space-y-4">
         <RequestMap requests={[request]} stations={stations} teams={teams} showNearestTeams />
-        <div className="apple-utility-card"><h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.recommendations")}</h2><div className="space-y-3">{recommendations.map((item) => <div key={item.team_id} className="border-t border-slate-200 py-3 text-sm"><div className="font-semibold">{item.team_name} · {item.recommendation_score}/100</div><p>{item.estimated_distance_km === undefined ? t("detail.noDistance") : `${item.estimated_distance_km} ${t("detail.straightDistance")}`} · {item.vehicle_type ?? t("detail.noVehicle")}</p><p className="mt-1 text-slate-600">{item.reasons.join(" · ")}</p>{item.warnings.map((warning) => <p key={warning} className="mt-1 text-amber-700">⚠ {warning}</p>)}</div>)}{!recommendations.length && <p className="text-sm text-slate-500">{t("detail.noTeam")}</p>}</div></div>
+        <div className="apple-utility-card"><h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.recommendations")}</h2><div className="space-y-3">{recommendations.map((item) => <div key={item.team_id} className="border-t border-slate-200 py-3 text-sm"><div className="font-semibold">{item.team_name} · {item.recommendation_score}/100</div><p>{item.estimated_distance_km === undefined ? t("detail.noDistance") : `${item.estimated_distance_km} ${t("detail.straightDistance")}`} · {item.vehicle_type ?? t("detail.noVehicle")}</p><p className="mt-1 text-slate-600">{item.reasons.join(" · ")}</p>{item.warnings.map((warning) => <p key={warning} className="mt-1 text-amber-700">⚠ {warning}</p>)}<button onClick={() => setTeamId(String(item.team_id))} className="secondary-button mt-2">{t("detail.chooseTeam")}</button></div>)}{!recommendations.length && <p className="text-sm text-slate-500">{t("detail.noTeam")}</p>}</div></div>
         <div className="apple-utility-card">
           <h2 className="mb-3 text-[21px] font-semibold tracking-[-0.28px]">{t("detail.assignment")}</h2>
           <p className="mb-3 text-sm text-slate-600">{t("detail.source")}: <strong>{request.source}</strong>{request.external_reference ? ` · ${request.external_reference}` : ""}{request.is_simulated ? " · simulator" : ""}</p>
           <div className="space-y-3">
-            {request.status === "PENDING_VERIFICATION" && <button onClick={verify} className="primary-button">{t("detail.verify")}</button>}
+            {request.status === "PENDING_VERIFICATION" && <button onClick={verify} disabled={actionLoading} className="primary-button disabled:opacity-50">{t("detail.verify")}</button>}
             <select className="field" value={teamId} onChange={(event) => setTeamId(event.target.value)}>
               <option value="">{t("detail.chooseTeam")}</option>
-              {teams.map((team) => <option key={team.id} value={team.id}>{team.name} - {team.status}</option>)}
+              {teams.filter((team) => team.status === "AVAILABLE").map((team) => <option key={team.id} value={team.id}>{team.name} - {team.status}</option>)}
             </select>
             <textarea className="field min-h-20" placeholder={t("detail.dispatchNote")} value={note} onChange={(event) => setNote(event.target.value)} />
-            <button onClick={assign} disabled={request.status !== "VERIFIED"} className="primary-button disabled:cursor-not-allowed disabled:opacity-50">{t("detail.assign")}</button>
+            <button onClick={assign} disabled={request.status !== "VERIFIED" || !teamId || actionLoading} className="primary-button disabled:cursor-not-allowed disabled:opacity-50">{t("detail.assign")}</button>
             {message && <p className="text-sm text-green-700">{message}</p>}
+            {actionError && <p className="text-sm text-red-700">{actionError}</p>}
           </div>
         </div>
       </aside>

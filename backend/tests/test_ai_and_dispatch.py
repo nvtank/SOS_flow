@@ -52,6 +52,40 @@ def test_bedrock_structured_tool_output_is_validated():
     assert result.number_of_people == 3
 
 
+def test_bedrock_missing_bookkeeping_field_keeps_structured_extraction():
+    class Client:
+        def converse(self, **kwargs):
+            response = tool_response()
+            del response["output"]["message"]["content"][0]["toolUse"]["input"]["normalized_message"]
+            return response
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Có 3 người mắc kẹt")
+
+    assert result.normalized_message == "có 3 người mắc kẹt"
+    assert result.number_of_people == 3
+
+
+def test_bedrock_preserves_explicit_street_and_does_not_invent_elderly():
+    class Client:
+        def converse(self, **kwargs):
+            return tool_response(
+                extracted_location={"raw_text": "đương trân đài nghiả", "province": None, "district": None, "commune": None, "village": None},
+                number_of_elderly=1,
+                detected_risks=["children", "elderly"],
+                missing_information=["exact_location"],
+            )
+
+    analyzer = BedrockEmergencyAnalyzer(Settings(ai_provider="bedrock", bedrock_model_id="test-model"), Client())
+    result = analyzer.analyze("Tôi ở đường trần đại nghĩa, ngũ hành sơn cùng 4 trẻ nhỏ")
+
+    assert result.extracted_location.raw_text == "đường trần đại nghĩa, ngũ hành sơn"
+    assert result.extracted_location.district == "Ngũ Hành Sơn"
+    assert result.number_of_elderly is None
+    assert "elderly" not in result.detected_risks
+    assert "exact_location" not in result.missing_information
+
+
 @pytest.mark.parametrize("failure", [ValueError("invalid json"), TimeoutError("too slow")])
 def test_bedrock_failures_fall_back_without_losing_analysis(monkeypatch, failure):
     class FailingAnalyzer:
