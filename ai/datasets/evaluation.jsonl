@@ -1,0 +1,40 @@
+{"message":"Có 5 người mắc kẹt, nước lên nhanh ở cầu Trà Linh","risks":["trapped","high_water"],"missing":[]}
+{"message":"Cuu voi nha toi ngap noc co 2 tre em","risks":["high_water","children"],"missing":["exact_location"]}
+{"message":"Bà tôi bị thương ở Hòa Sơn","risks":["injury"],"missing":["number_of_people"]}
+{"message":"Mắc kẹt trong nhà, không ra được","risks":["trapped"],"missing":["exact_location","number_of_people"]}
+{"message":"Nước cuốn mạnh gần cầu Nam Ô","risks":["high_water"],"missing":["number_of_people"]}
+{"message":"Có người không thở được","risks":["injury"],"missing":["exact_location","number_of_people"]}
+{"message":"Nhà ngập nhẹ, mọi người an toàn","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Sat lo sau nha o Hoa Son","risks":[],"missing":["number_of_people"]}
+{"message":"3 nguoi mac ket gan cau","risks":["trapped"],"missing":[]}
+{"message":"em be bi sot, nuoc vao nha","risks":["children"],"missing":["exact_location","number_of_people"]}
+{"message":"Có 7 người, nước lên đến tầng hai","risks":["high_water"],"missing":["exact_location"]}
+{"message":"Tôi chỉ cần hỏi đường sơ tán","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Bị kẹt trên mái nhà ở phường Hòa Minh","risks":["trapped"],"missing":["number_of_people"]}
+{"message":"co nguoi gia bi thuong o duong Nguyen Luong Bang","risks":["injury"],"missing":["number_of_people"]}
+{"message":"Nước đang chìm xe, 2 người","risks":["high_water"],"missing":["exact_location"]}
+{"message":"Cần thuốc cho trẻ em tại xã Hòa Liên","risks":["children"],"missing":["number_of_people"]}
+{"message":"Không có nguy hiểm, báo để theo dõi","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Mắc kẹt, có người bất tỉnh","risks":["trapped","injury"],"missing":["exact_location","number_of_people"]}
+{"message":"Nuoc len nhanh, ca nha 4 nguoi","risks":["high_water"],"missing":["exact_location"]}
+{"message":"Đường sạt lở, không đi được","risks":[],"missing":["number_of_people"]}
+{"message":"Có 1 phụ nữ mang thai cần hỗ trợ","risks":[],"missing":["exact_location"]}
+{"message":"Nhà bên sông bị nước cuốn, cứu gấp","risks":["high_water"],"missing":["exact_location","number_of_people"]}
+{"message":"2 trẻ em và mẹ bị kẹt ở thôn An","risks":["trapped","children"],"missing":[]}
+{"message":"Điện thoại yếu, không rõ địa chỉ","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Bị thương chân sau lũ ở huyện Hòa Vang","risks":["injury"],"missing":["number_of_people"]}
+{"message":"cần cứu hộ gấp gấp gấp","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Nước qua đầu, chúng tôi đang chìm","risks":["high_water"],"missing":["exact_location","number_of_people"]}
+{"message":"Ba nguoi khong ra duoc khoi nha","risks":["trapped"],"missing":["exact_location"]}
+{"message":"Có trẻ em nhưng hiện đã an toàn","risks":["children"],"missing":["exact_location","number_of_people"]}
+{"message":"Tàu nhỏ bị kẹt gần cầu Trà Linh","risks":["trapped"],"missing":["number_of_people"]}
+{"message":"Ngập nóc nhà ở phường Hòa Khánh","risks":["high_water"],"missing":["number_of_people"]}
+{"message":"Người thân mất liên lạc, không có vị trí","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Nạn nhân bất tỉnh, cần y tế","risks":["injury"],"missing":["exact_location","number_of_people"]}
+{"message":"Xe cứu thương không vào được vì sạt lở","risks":[],"missing":["number_of_people"]}
+{"message":"4 người bị cô lập do nước lên","risks":["high_water"],"missing":["exact_location"]}
+{"message":"mẹ và em bé mắc kẹt","risks":["trapped","children"],"missing":["exact_location","number_of_people"]}
+{"message":"Tin nhắn thử hệ thống","risks":[],"missing":["exact_location","number_of_people"]}
+{"message":"Có người bị thương và nước cuốn","risks":["injury","high_water"],"missing":["exact_location","number_of_people"]}
+{"message":"Không ra được khỏi tầng trệt, 6 người","risks":["trapped"],"missing":["exact_location"]}
+{"message":"Nước thấp nhưng cần kiểm tra khu dân cư","risks":[],"missing":["exact_location","number_of_people"]}

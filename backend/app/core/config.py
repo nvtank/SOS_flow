@@ -10,6 +10,16 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     priority_rules_path: str = "/config/priority-rules.yaml"
     seed_on_startup: bool = True
+    demo_mode: bool = False
+    demo_token: str = "sosflow-demo"
+    ai_provider: str = "mock"
+    aws_region: str | None = None
+    bedrock_model_id: str | None = None
+    bedrock_inference_profile_arn: str | None = None
+    bedrock_custom_model_arn: str | None = None
+    bedrock_timeout_seconds: int = 12
+    bedrock_max_retries: int = 2
+    ai_fallback_enabled: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,0 +1,1 @@
+{"message":"Nước cuốn mạnh, có người bị thương.","expected":{"detected_risks":["high_water","injury"],"missing_information":["exact_location","number_of_people"]}}

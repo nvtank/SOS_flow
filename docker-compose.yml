@@ -29,6 +29,16 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       PRIORITY_RULES_PATH: /config/priority-rules.yaml
       SEED_ON_STARTUP: "true"
+      DEMO_MODE: ${DEMO_MODE:-false}
+      DEMO_TOKEN: ${DEMO_TOKEN:-sosflow-demo}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AWS_REGION: ${AWS_REGION:-}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-}
+      BEDROCK_INFERENCE_PROFILE_ARN: ${BEDROCK_INFERENCE_PROFILE_ARN:-}
+      BEDROCK_CUSTOM_MODEL_ARN: ${BEDROCK_CUSTOM_MODEL_ARN:-}
+      BEDROCK_TIMEOUT_SECONDS: ${BEDROCK_TIMEOUT_SECONDS:-12}
+      BEDROCK_MAX_RETRIES: ${BEDROCK_MAX_RETRIES:-2}
+      AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-true}
     ports:
       - "8000:8000"
     depends_on:
@@ -40,6 +50,8 @@ services:
       context: frontend
     environment:
       VITE_API_BASE_URL: http://localhost:8000
+      VITE_DEMO_MODE: ${DEMO_MODE:-false}
+      VITE_DEMO_TOKEN: ${DEMO_TOKEN:-sosflow-demo}
     ports:
       - "5173:5173"
     depends_on:
