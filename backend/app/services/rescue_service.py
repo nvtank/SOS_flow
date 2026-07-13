@@ -57,6 +57,20 @@ PRIORITY_INPUT_FIELDS = {
     "water_level",
 }
 
+# Reporter can submit only a free-text SOS message. These values are populated
+# from a sufficiently confident AI suggestion only when that field was absent
+# from the original payload. Operator edits and explicit reporter values always
+# take precedence; re-analysis remains suggestion-only.
+AI_AUTOFILL_CONFIDENCE = 0.65
+AI_AUTOFILL_FIELDS = (
+    "number_of_people",
+    "number_of_children",
+    "number_of_elderly",
+    "number_of_injured",
+    "is_trapped",
+    "water_level",
+)
+
 
 def _engine() -> PriorityEngine:
     return PriorityEngine(get_settings().rules_path)
@@ -131,6 +145,34 @@ def _request_code(now: datetime, request_id: int, uniqueness_token: str) -> str:
     return f"SOS-{now:%Y%m%d}-{request_id:06d}-{uniqueness_token[:12].upper()}"
 
 
+def _apply_ai_autofill(request: RescueRequest, payload: RescueRequestCreate) -> list[str]:
+    """Apply only high-confidence suggestions for fields omitted by reporter."""
+    analysis = request.ai_analysis or {}
+    if float(analysis.get("confidence") or 0) < AI_AUTOFILL_CONFIDENCE:
+        return []
+
+    applied: list[str] = []
+    provided = payload.model_fields_set
+    for field in AI_AUTOFILL_FIELDS:
+        suggestion = analysis.get(field)
+        if field not in provided and suggestion is not None:
+            setattr(request, field, suggestion)
+            applied.append(field)
+
+    location = analysis.get("extracted_location") or {}
+    location_text = location.get("raw_text")
+    if "address" not in provided and location_text:
+        request.address = location_text
+        applied.append("address")
+
+    risks = set(analysis.get("detected_risks") or [])
+    for field, risk in (("has_disabled_person", "disabled_person"), ("has_pregnant_person", "pregnant_person")):
+        if field not in provided and risk in risks:
+            setattr(request, field, True)
+            applied.append(field)
+    return applied
+
+
 def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRequest:
     """Create with a temporary UUID, then derive the human code from DB identity.
 
@@ -160,12 +202,18 @@ def create_rescue_request(db: Session, payload: RescueRequestCreate) -> RescueRe
         )
         request.ai_analysis, request.ai_metadata = analyze_with_fallback(request.message)
         request.ai_fallback_used = bool(request.ai_metadata["fallback_used"])
+        auto_applied_fields = _apply_ai_autofill(request, payload)
+        request.ai_metadata["auto_applied_fields"] = auto_applied_fields
         _apply_priority(request, now)
         db.add(request)
         try:
             db.flush()
             request.request_code = _request_code(now, request.id, uniqueness_token)
-            _record_history(db, request, None, request.status, "reporter", payload.note)
+            note = payload.note
+            if auto_applied_fields:
+                suffix = f"AI extracted text-only fields: {', '.join(auto_applied_fields)}"
+                note = f"{note}; {suffix}" if note else suffix
+            _record_history(db, request, None, request.status, "reporter", note)
             db.commit()
         except IntegrityError:
             # Collision is extremely unlikely, but this also handles an old

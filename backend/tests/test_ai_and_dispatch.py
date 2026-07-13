@@ -78,6 +78,21 @@ def test_reanalysis_keeps_reporter_data_and_writes_audit(db, monkeypatch):
     assert any("AI analysis re-run" in (item.note or "") for item in refreshed.status_history)
 
 
+def test_text_only_report_uses_high_confidence_ai_suggestions_for_priority(db, monkeypatch):
+    analysis = tool_response()["output"]["message"]["content"][0]["toolUse"]["input"]
+    monkeypatch.setattr(rescue_service, "analyze_with_fallback", lambda _: (analysis, {"fallback_used": False, "provider": "bedrock"}))
+
+    request = rescue_service.create_rescue_request(db, RescueRequestCreate(message="Có 3 người, 1 trẻ em và 1 người bị thương mắc kẹt."))
+
+    assert request.number_of_people == 3
+    assert request.number_of_children == 1
+    assert request.number_of_injured == 1
+    assert request.is_trapped is True
+    assert request.water_level == 2.1
+    assert set(request.ai_metadata["auto_applied_fields"]) >= {"number_of_people", "number_of_children", "number_of_injured", "is_trapped", "water_level"}
+    assert request.priority_level in {"HIGH", "CRITICAL"}
+
+
 def test_recommendation_prefers_capable_nearby_available_team_without_assigning(db):
     request = rescue_service.create_rescue_request(db, RescueRequestCreate(message="Nước dâng, có người bị thương", latitude=16.05, longitude=108.20, number_of_people=4, number_of_injured=1, water_level=2.2))
     nearby = RescueTeam(name="Xuồng gần", status=TeamStatus.AVAILABLE.value, current_latitude=16.051, current_longitude=108.201, vehicle_type="Xuồng", capabilities=["flood_rescue", "medical"], equipment=["xuồng", "túi sơ cứu"], max_people_capacity=8)

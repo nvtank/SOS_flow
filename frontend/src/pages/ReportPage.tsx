@@ -39,9 +39,6 @@ export function ReportPage() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const body: Record<string, unknown> = Object.fromEntries(form.entries());
-    const numeric = ["latitude", "longitude", "number_of_people", "number_of_children", "number_of_elderly", "number_of_injured", "water_level"];
-    numeric.forEach((key) => { if (body[key] === "") delete body[key]; else if (body[key] !== undefined) body[key] = Number(body[key]); });
-    body.has_disabled_person = form.has("has_disabled_person"); body.has_pregnant_person = form.has("has_pregnant_person"); body.is_trapped = form.has("is_trapped");
     try {
       if (!navigator.onLine) {
         const local = makeOfflineReport(body); await offlineQueue.put(local); await refreshQueue();
@@ -63,13 +60,8 @@ export function ReportPage() {
     <div className="apple-hero"><div className="flex flex-wrap items-center justify-center gap-3"><h1>{t("report.title")}</h1><div className="inline-flex items-center gap-2 rounded-full border border-white/30 px-3 py-2 text-sm text-white">{online ? <Wifi size={16} /> : <WifiOff size={16} />}{online ? t("form.online") : t("form.offline")}</div></div><p>{t("report.subtitle")}</p></div>
     {!online && <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><CloudOff className="mr-2 inline" size={16} />Báo cáo đang được lưu trên thiết bị và chưa gửi về trung tâm. Không đóng dữ liệu trình duyệt trước khi đồng bộ.</div>}
     <form onSubmit={submit} className="apple-tile apple-tile--paper grid gap-5">
-      <div className="grid gap-4 md:grid-cols-2"><label><span className="label">{t("form.name")}</span><input name="reporter_name" className="field" /></label><label><span className="label">{t("form.phone")}</span><input name="phone_number" className="field" /></label></div>
       <label><span className="label">{t("form.message")}</span><textarea required name="message" className="field min-h-28" placeholder={t("form.messageHint")} /></label>
-      <label><span className="label">{t("form.address")}</span><input name="address" className="field" /></label>
-      <div className="grid gap-4 md:grid-cols-2"><label><span className="label">Latitude</span><input name="latitude" type="number" step="any" className="field" /></label><label><span className="label">Longitude</span><input name="longitude" type="number" step="any" className="field" /></label></div>
-      <div className="grid gap-4 md:grid-cols-4"><label><span className="label">{t("form.people")}</span><input name="number_of_people" type="number" min="0" defaultValue="1" className="field" /></label><label><span className="label">{t("form.children")}</span><input name="number_of_children" type="number" min="0" defaultValue="0" className="field" /></label><label><span className="label">{t("form.elderly")}</span><input name="number_of_elderly" type="number" min="0" defaultValue="0" className="field" /></label><label><span className="label">{t("form.injured")}</span><input name="number_of_injured" type="number" min="0" defaultValue="0" className="field" /></label></div>
-      <div className="grid gap-4 md:grid-cols-2"><label><span className="label">{t("form.water")}</span><input name="water_level" type="number" min="0" step="0.1" className="field" /></label><label><span className="label">{t("form.note")}</span><input name="note" className="field" /></label></div>
-      <div className="flex flex-wrap gap-4 text-sm"><label className="inline-flex items-center gap-2"><input type="checkbox" name="is_trapped" /> {t("form.trapped")}</label><label className="inline-flex items-center gap-2"><input type="checkbox" name="has_disabled_person" /> {t("form.disabled")}</label><label className="inline-flex items-center gap-2"><input type="checkbox" name="has_pregnant_person" /> {t("form.pregnant")}</label></div>
+      <p className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">{t("report.aiHint")}</p>
       {error && <div className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</div>}{notice && <div className="rounded bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
       <button disabled={loading} className="primary-button inline-flex w-fit items-center gap-2 disabled:opacity-60"><Send size={18} /> {loading ? t("form.sending") : online ? t("form.send") : t("form.saveOffline")}</button>
     </form>
