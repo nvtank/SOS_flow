@@ -1,0 +1,13 @@
+# Terraform state — không commit
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
