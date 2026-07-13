@@ -42,6 +42,8 @@ Giải pháp cụ thể của MVP:
 - Mock AI Analyzer: interface sẵn để sau này thay bằng Amazon Bedrock hoặc LLM khác.
 - Seed data: 10 yêu cầu cứu hộ đủ các mức LOW, MEDIUM, HIGH, CRITICAL và 3 đội cứu hộ.
 
+MVP này chứng minh ba điểm chính: dữ liệu SOS có thể được gom vào một hàng đợi thống nhất, quyết định ưu tiên có thể giải thích được, và tiến độ cứu hộ có thể được cập nhật theo một vòng đời rõ ràng thay vì theo dõi rời rạc qua tin nhắn.
+
 Người dùng chính:
 
 - Reporter: người dân gửi yêu cầu SOS.
