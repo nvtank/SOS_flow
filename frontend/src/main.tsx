@@ -10,6 +10,11 @@ import { RequestDetailPage } from "./pages/RequestDetailPage";
 import { RequestsPage } from "./pages/RequestsPage";
 import { RescueMissionsPage } from "./pages/RescueMissionsPage";
 import { TeamsPage } from "./pages/TeamsPage";
+import { I18nProvider } from "./i18n";
+
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"));
+}
 
 const router = createBrowserRouter([
   {
@@ -29,6 +34,8 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <I18nProvider>
+      <RouterProvider router={router} />
+    </I18nProvider>
   </React.StrictMode>
 );

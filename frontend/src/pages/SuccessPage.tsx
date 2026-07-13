@@ -1,23 +1,25 @@
 import { Link, useLocation } from "react-router-dom";
 import { RescueRequest } from "../api/client";
+import { useI18n } from "../i18n";
 
 export function SuccessPage() {
+  const { locale, t } = useI18n();
   const { state } = useLocation();
   const request = state as RescueRequest | undefined;
   return (
-    <section className="mx-auto max-w-xl rounded border border-slate-200 bg-white p-6">
-      <h1 className="mb-3 text-2xl font-bold">Yêu cầu của bạn đã được tiếp nhận.</h1>
+    <section className="apple-tile apple-tile--paper mx-auto max-w-2xl text-center">
+      <h1 className="mb-4 text-[34px] font-semibold tracking-[-0.374px]">{t("success.title")}</h1>
       {request ? (
-        <div className="space-y-2 text-slate-800">
-          <p>Mã yêu cầu: <strong>{request.request_code}</strong></p>
-          <p>Trạng thái: <strong>{request.status}</strong></p>
-          <p>Thời gian gửi: {new Date(request.created_at).toLocaleString("vi-VN")}</p>
-          <p className="pt-2 text-sm text-slate-600">Hãy giữ điện thoại trong trạng thái có thể liên lạc.</p>
+        <div className="mx-auto max-w-md space-y-2 text-left text-[#1d1d1f]">
+          <p>{t("success.code")}: <strong>{request.request_code}</strong></p>
+          <p>{t("success.status")}: <strong>{request.status}</strong></p>
+          <p>{new Date(request.created_at).toLocaleString(locale)}</p>
+          <p className="pt-3 text-sm text-[#7a7a7a]">{t("success.keepPhone")}</p>
         </div>
       ) : (
-        <p>Không tìm thấy thông tin yêu cầu vừa gửi.</p>
+        <p>{t("success.missing")}</p>
       )}
-      <Link to="/report" className="mt-5 inline-block rounded bg-command px-4 py-2 text-white">Gửi yêu cầu khác</Link>
+      <Link to="/report" className="primary-button mt-6 inline-flex">{t("success.another")}</Link>
     </section>
   );
 }

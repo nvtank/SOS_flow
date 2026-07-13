@@ -1,94 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
-import { api, RescueRequest } from "../api/client";
-import { PriorityBadge, StatusBadge } from "../components/Badges";
+import { api, PaginatedRescueRequests } from "../api/client";
+import { DuplicateBadge, PriorityBadge, SourceBadge, StatusBadge } from "../components/Badges";
+import { useI18n } from "../i18n";
 
 export function RequestsPage() {
-  const [requests, setRequests] = useState<RescueRequest[]>([]);
-  const [status, setStatus] = useState("");
-  const [priority, setPriority] = useState("");
-  const [search, setSearch] = useState("");
-
-  const query = useMemo(() => {
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    if (priority) params.set("priority_level", priority);
-    if (search) params.set("search", search);
-    const text = params.toString();
-    return text ? `?${text}` : "";
-  }, [status, priority, search]);
-
-  useEffect(() => {
-    api.getRequests(query).then(setRequests);
-  }, [query]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Danh sách yêu cầu</h1>
-          <p className="text-sm text-slate-600">Mặc định sắp xếp theo điểm ưu tiên từ cao xuống thấp.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <label className="relative">
-            <Search className="absolute left-2 top-2.5 text-slate-400" size={16} />
-            <input className="field pl-8" placeholder="Tìm kiếm" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </label>
-          <select className="field w-40" value={priority} onChange={(e) => setPriority(e.target.value)}>
-            <option value="">Mọi ưu tiên</option>
-            <option>CRITICAL</option>
-            <option>HIGH</option>
-            <option>MEDIUM</option>
-            <option>LOW</option>
-          </select>
-          <select className="field w-48" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">Mọi trạng thái</option>
-            <option>PENDING_VERIFICATION</option>
-            <option>ASSIGNED</option>
-            <option>ACCEPTED</option>
-            <option>MOVING</option>
-            <option>ARRIVED</option>
-            <option>RESCUING</option>
-            <option>COMPLETED</option>
-            <option>FAILED</option>
-          </select>
-        </div>
-      </div>
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-        <table className="min-w-[980px] w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs uppercase text-slate-600">
-            <tr>
-              <th className="px-3 py-2">Mã</th>
-              <th className="px-3 py-2">Thời gian</th>
-              <th className="px-3 py-2">Người gửi</th>
-              <th className="px-3 py-2">Vị trí</th>
-              <th className="px-3 py-2">Số người</th>
-              <th className="px-3 py-2">Điểm</th>
-              <th className="px-3 py-2">Mức</th>
-              <th className="px-3 py-2">Trạng thái</th>
-              <th className="px-3 py-2">Đội</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.map((item) => (
-              <tr key={item.id} className="border-t border-slate-100 align-top">
-                <td className="px-3 py-2 font-semibold">{item.request_code}</td>
-                <td className="px-3 py-2">{new Date(item.created_at).toLocaleString("vi-VN")}</td>
-                <td className="px-3 py-2">{item.reporter_name ?? "Chưa rõ"}</td>
-                <td className="px-3 py-2">{item.address ?? "Thiếu vị trí"}</td>
-                <td className="px-3 py-2">{item.number_of_people}</td>
-                <td className="px-3 py-2 font-bold">{item.priority_score}</td>
-                <td className="px-3 py-2"><PriorityBadge level={item.priority_level} /></td>
-                <td className="px-3 py-2"><StatusBadge status={item.status} /></td>
-                <td className="px-3 py-2">{item.assigned_team?.name ?? "-"}</td>
-                <td className="px-3 py-2"><Link className="font-semibold text-sky-700" to={`/admin/requests/${item.id}`}>Chi tiết</Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  const { locale, t } = useI18n();
+  const [result, setResult] = useState<PaginatedRescueRequests>();
+  const [status, setStatus] = useState(""); const [priority, setPriority] = useState(""); const [source, setSource] = useState(""); const [assignment, setAssignment] = useState(""); const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1); const [sortBy, setSortBy] = useState("priority_score"); const [sortOrder, setSortOrder] = useState("desc"); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const query = useMemo(() => { const params = new URLSearchParams({ page: String(page), page_size: "25", sort_by: sortBy, sort_order: sortOrder }); if (status) params.set("status", status); if (priority) params.set("priority_level", priority); if (source) params.set("source", source); if (assignment) params.set("assignment", assignment); if (search) params.set("search", search); return `?${params}`; }, [status, priority, source, assignment, search, page, sortBy, sortOrder]);
+  useEffect(() => { let active = true; setLoading(true); api.getRequests(query).then((next) => { if (active) { setResult(next); setError(""); } }).catch((cause) => active && setError(cause instanceof Error ? cause.message : "Không thể tải danh sách.")).finally(() => active && setLoading(false)); return () => { active = false; }; }, [query]);
+  const resetPage = (setter: (value: string) => void) => (value: string) => { setter(value); setPage(1); };
+  const maxPage = Math.max(1, Math.ceil((result?.total ?? 0) / 25));
+  return <div className="space-y-6"><div className="dashboard-header"><div><span className="eyebrow">SOSFLOW · INTAKE QUEUE</span><h1>{t("requests.title")}</h1><p>{t("requests.subtitle")}</p></div></div><div className="apple-utility-card flex flex-wrap gap-2"><label className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16} /><input className="field w-64 pl-9" placeholder={t("requests.search")} value={search} onChange={(e) => resetPage(setSearch)(e.target.value)} /></label><select className="field w-36" value={source} onChange={(e) => resetPage(setSource)(e.target.value)}><option value="">{t("requests.allSources")}</option>{["WEB", "CALL_112", "PHONE", "SMS", "ZALO", "SOCIAL_MEDIA", "LOCAL_OFFICER", "OFFLINE_SYNC"].map((item) => <option key={item}>{item}</option>)}</select><select className="field w-36" value={priority} onChange={(e) => resetPage(setPriority)(e.target.value)}><option value="">{t("requests.allPriorities")}</option>{["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((item) => <option key={item}>{item}</option>)}</select><select className="field w-44" value={status} onChange={(e) => resetPage(setStatus)(e.target.value)}><option value="">{t("requests.allStatuses")}</option>{["PENDING_VERIFICATION", "VERIFIED", "ASSIGNED", "ACCEPTED", "MOVING", "BLOCKED", "ARRIVED", "RESCUING", "NEED_REINFORCEMENT", "COMPLETED", "FAILED"].map((item) => <option key={item}>{item}</option>)}</select><select className="field w-36" value={assignment} onChange={(e) => resetPage(setAssignment)(e.target.value)}><option value="">{t("requests.allAssignments")}</option><option value="assigned">{t("requests.assigned")}</option><option value="unassigned">{t("requests.unassigned")}</option></select><select className="field w-40" value={`${sortBy}:${sortOrder}`} onChange={(e) => { const [field, direction] = e.target.value.split(":"); setSortBy(field); setSortOrder(direction); setPage(1); }}><option value="priority_score:desc">{t("requests.highest")}</option><option value="created_at:desc">{t("requests.newest")}</option><option value="created_at:asc">{t("requests.oldest")}</option><option value="updated_at:desc">{t("requests.recent")}</option></select></div>{error && <div className="inline-alert inline-alert--error">{error}</div>}<div className="apple-utility-card overflow-x-auto p-0"><table className="min-w-[1280px] w-full text-sm"><thead className="bg-slate-100 text-left text-xs text-slate-600"><tr>{[t("dashboard.code"), t("requests.time"), t("dashboard.source"), t("dashboard.location"), t("requests.people"), t("requests.wait"), t("dashboard.score"), t("requests.level"), t("dashboard.status"), t("dashboard.team"), ""].map((item, index) => <th key={`${item}-${index}`} className="px-4 py-3">{item}</th>)}</tr></thead><tbody>{loading ? <tr><td className="p-8 text-center text-slate-500" colSpan={11}>{t("common.loading")}</td></tr> : result?.items.length ? result.items.map((item) => <tr key={item.id} className="border-t border-slate-100 align-top"><td className="px-4 py-3 font-semibold">{item.request_code}</td><td className="px-4 py-3">{new Date(item.received_at).toLocaleString(locale)}</td><td className="px-4 py-3"><SourceBadge source={item.source} /></td><td className="px-4 py-3">{item.address ?? t("dashboard.missingLocation")}</td><td className="px-4 py-3">{item.number_of_people}</td><td className="px-4 py-3">{waiting(item.received_at)}</td><td className="px-4 py-3 font-semibold">{item.priority_score}</td><td className="px-4 py-3"><PriorityBadge level={item.priority_level} /></td><td className="px-4 py-3"><StatusBadge status={item.status} /> <DuplicateBadge state={item.duplicate_state} /></td><td className="px-4 py-3">{item.assigned_team?.name ?? "—"}</td><td className="px-4 py-3"><Link className="font-semibold text-sky-700" to={`/admin/requests/${item.id}`}>{t("requests.detail")}</Link></td></tr>) : <tr><td className="p-8 text-center text-slate-500" colSpan={11}>{t("requests.empty")}</td></tr>}</tbody></table></div><div className="flex items-center justify-between text-sm"><span>{result ? `${result.total} reports` : ""}</span><div className="flex items-center gap-2"><button disabled={page <= 1} onClick={() => setPage(page - 1)} className="secondary-button disabled:opacity-40">{t("requests.previous")}</button><span>{t("requests.page")} {page}/{maxPage}</span><button disabled={page >= maxPage} onClick={() => setPage(page + 1)} className="secondary-button disabled:opacity-40">{t("requests.next")}</button></div></div></div>;
 }
+
+function waiting(receivedAt: string) { const minutes = Math.max(0, Math.floor((Date.now() - new Date(receivedAt).getTime()) / 60_000)); return minutes < 60 ? `${minutes} phút` : `${Math.floor(minutes / 60)}h ${minutes % 60}p`; }
