@@ -312,3 +312,20 @@ def test_invalid_bedrock_structure_becomes_fallback(monkeypatch):
 
     assert metadata["fallback_used"] is True
     assert metadata["error_code"] == "INVALID_STRUCTURED_OUTPUT"
+
+
+def test_bedrock_access_denied_is_classified_as_model_access_error(monkeypatch):
+    class DeniedAnalyzer:
+        provider_name = "bedrock"
+        model_id = "test-model"
+
+        def analyze(self, _: str):
+            raise RuntimeError("AccessDeniedException: not authorized to perform bedrock:InvokeModel")
+
+    monkeypatch.setattr("app.services.ai_analyzer.get_emergency_analyzer", lambda _: DeniedAnalyzer())
+    settings = Settings(ai_provider="bedrock", bedrock_model_id="test-model", ai_fallback_enabled=True)
+
+    _, metadata = ai_analyzer.analyze_with_fallback("Cần cứu hộ", settings)
+
+    assert metadata["fallback_used"] is True
+    assert metadata["error_code"] == "MODEL_ACCESS_ERROR"

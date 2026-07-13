@@ -24,6 +24,23 @@ def test_priority_engine_marks_life_threatening_case_as_critical():
     assert any("nguy hiểm" in reason for reason in result["reasons"])
 
 
+def test_single_life_threatening_phrase_gets_critical_safety_floor_without_ai():
+    engine = PriorityEngine(RULES_PATH)
+    result = engine.calculate(PriorityInput(message="Cứu với, có người sắp chết rồi.", number_of_people=1))
+
+    assert result["priority_level"] == "CRITICAL"
+    assert result["priority_score"] == 100
+    assert any("đe dọa tính mạng" in reason for reason in result["reasons"])
+
+
+def test_unaccented_breathing_emergency_gets_critical_safety_floor():
+    engine = PriorityEngine(RULES_PATH)
+    result = engine.calculate(PriorityInput(message="Cuu toi, co nguoi khong tho duoc", number_of_people=1))
+
+    assert result["priority_level"] == "CRITICAL"
+    assert result["priority_score"] == 100
+
+
 def test_priority_engine_keeps_safe_low_water_case_low():
     engine = PriorityEngine(RULES_PATH)
     result = engine.calculate(PriorityInput(message="Nhà tôi bị ngập nhưng mọi người vẫn an toàn.", number_of_people=1, water_level=0.2))

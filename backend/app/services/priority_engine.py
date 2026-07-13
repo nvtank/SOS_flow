@@ -90,8 +90,17 @@ class PriorityEngine:
                 score += waiting_score
                 reasons.append(f"Đã chờ {waited_minutes} phút chưa hoàn tất xử lý")
 
+        safety_floor = self.rules.get("critical_safety_floor", {})
+        if any(keyword.lower() in message for keyword in safety_floor.get("keywords", [])):
+            floor_score = int(safety_floor.get("score", 70))
+            if score < floor_score:
+                score = floor_score
+            reasons.append("Có dấu hiệu đe dọa tính mạng, áp dụng mức ưu tiên khẩn cấp tối thiểu")
+
+        score = min(int(score), int(self.rules["priority_levels"].get("max_score", score)))
+
         return {
-            "priority_score": int(score),
+            "priority_score": score,
             "priority_level": self._level(score),
             "reasons": reasons,
         }

@@ -29,6 +29,28 @@ severity_keywords:
       - "nuoc len"
       - "ngap noc"
 default_severity_score: 5
+# A direct threat-to-life phrase is a safety invariant, not just another
+# additive factor. Even when AI is unavailable and no other facts are known,
+# these messages must enter the top operational queue immediately.
+critical_safety_floor:
+  score: 100
+  keywords:
+    - "sắp chết"
+    - "sap chet"
+    - "không thở"
+    - "khong tho"
+    - "bất tỉnh"
+    - "bat tinh"
+    - "đang chìm"
+    - "dang chim"
+    - "nước cuốn"
+    - "nuoc cuon"
+    - "không sống qua"
+    - "khong song qua"
+    - "không trụ nổi"
+    - "khong tru noi"
+    - "không cầm cự"
+    - "khong cam cu"
 imminent_danger:
   score: 20
   keywords:
@@ -64,3 +86,4 @@ priority_levels:
   low_max: 29
   medium_max: 49
   high_max: 69
+  max_score: 100

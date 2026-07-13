@@ -205,8 +205,11 @@ def _safe_error_code(error: Exception) -> str:
     description = f"{error.__class__.__name__} {error}".lower()
     if "timeout" in description: return "TIMEOUT"
     if "thrott" in description: return "THROTTLED"
-    if "credential" in description or "auth" in description: return "CREDENTIAL_ERROR"
+    # AccessDenied messages contain "not authorized"; classify model/IAM
+    # access before credential matching so they are not mislabeled as broken
+    # credentials.
     if "access" in description or "model" in description or "inference profile" in description: return "MODEL_ACCESS_ERROR"
+    if "credential" in description or "unrecognizedclient" in description or "invalid security token" in description: return "CREDENTIAL_ERROR"
     if "validation" in description or "json" in description or "structured" in description or "tool output" in description or "invalid" in description: return "INVALID_STRUCTURED_OUTPUT"
     return "ANALYZER_ERROR"
 
