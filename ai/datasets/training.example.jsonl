@@ -1,1 +1,0 @@
-{"messages":[{"role":"user","content":"Có 3 người mắc kẹt gần cầu."}],"assistant":{"summary":"Ba người có thể bị mắc kẹt gần cầu.","detected_risks":["trapped"],"missing_information":["exact_location"]}}
