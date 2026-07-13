@@ -51,7 +51,7 @@ resource "aws_iam_role_policy" "bedrock" {
         "bedrock:ConverseStream"
       ]
       Resource = [
-        "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.bedrock_model_id}",
+        "arn:aws:bedrock:*::foundation-model/${var.bedrock_model_id}",
         var.bedrock_inference_profile_arn
       ]
     }]
